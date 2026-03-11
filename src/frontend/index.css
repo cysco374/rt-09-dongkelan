@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Bricolage Grotesque - Display */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/assets/fonts/BricolageGrotesque[opsz,wdth,wght].woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Plus Jakarta Sans - Body */
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/assets/fonts/PlusJakartaSans[wght].woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+
+    /* Core palette: warm Indonesian green + terracotta */
+    /* Background: warm cream-white */
+    --background: 0.97 0.01 85;
+    --foreground: 0.18 0.03 200;
+
+    /* Card */
+    --card: 0.99 0.005 85;
+    --card-foreground: 0.18 0.03 200;
+
+    /* Popover */
+    --popover: 0.99 0.005 85;
+    --popover-foreground: 0.18 0.03 200;
+
+    /* Primary: deep forest green */
+    --primary: 0.38 0.12 150;
+    --primary-foreground: 0.98 0.005 85;
+
+    /* Secondary: light sage */
+    --secondary: 0.92 0.04 145;
+    --secondary-foreground: 0.28 0.08 145;
+
+    /* Muted */
+    --muted: 0.94 0.02 145;
+    --muted-foreground: 0.52 0.04 200;
+
+    /* Accent: warm terracotta */
+    --accent: 0.92 0.04 75;
+    --accent-foreground: 0.35 0.1 50;
+
+    /* Destructive */
+    --destructive: 0.52 0.22 25;
+    --destructive-foreground: 0.98 0.005 85;
+
+    /* Border & input */
+    --border: 0.88 0.03 145;
+    --input: 0.88 0.03 145;
+    --ring: 0.38 0.12 150;
+
+    /* Charts */
+    --chart-1: 0.46 0.14 145;
+    --chart-2: 0.58 0.16 45;
+    --chart-3: 0.52 0.18 25;
+    --chart-4: 0.62 0.14 200;
+    --chart-5: 0.68 0.18 80;
+
+    /* Sidebar */
+    --sidebar: 0.22 0.06 155;
+    --sidebar-foreground: 0.92 0.02 145;
+    --sidebar-primary: 0.75 0.14 145;
+    --sidebar-primary-foreground: 0.12 0.04 155;
+    --sidebar-accent: 0.30 0.08 155;
+    --sidebar-accent-foreground: 0.92 0.02 145;
+    --sidebar-border: 0.32 0.06 155;
+    --sidebar-ring: 0.55 0.12 145;
+
+    /* Custom tokens */
+    --green-badge: 0.88 0.12 145;
+    --green-badge-text: 0.28 0.14 145;
+    --yellow-badge: 0.92 0.12 80;
+    --yellow-badge-text: 0.38 0.14 65;
+    --red-badge: 0.90 0.12 25;
+    --red-badge-text: 0.38 0.18 25;
+    --blue-badge: 0.90 0.10 215;
+    --blue-badge-text: 0.30 0.12 220;
+  }
+
+  .dark {
+    --background: 0.14 0.04 155;
+    --foreground: 0.95 0.02 85;
+    --card: 0.18 0.04 155;
+    --card-foreground: 0.95 0.02 85;
+    --popover: 0.20 0.04 155;
+    --popover-foreground: 0.95 0.02 85;
+    --primary: 0.68 0.14 145;
+    --primary-foreground: 0.12 0.04 155;
+    --secondary: 0.24 0.06 155;
+    --secondary-foreground: 0.88 0.02 145;
+    --muted: 0.22 0.04 155;
+    --muted-foreground: 0.62 0.04 180;
+    --accent: 0.28 0.06 75;
+    --accent-foreground: 0.90 0.08 85;
+    --destructive: 0.60 0.22 25;
+    --destructive-foreground: 0.98 0.005 85;
+    --border: 0.28 0.04 155;
+    --input: 0.28 0.04 155;
+    --ring: 0.55 0.12 145;
+    --chart-1: 0.58 0.16 145;
+    --chart-2: 0.68 0.18 45;
+    --chart-3: 0.62 0.20 25;
+    --chart-4: 0.68 0.16 200;
+    --chart-5: 0.72 0.20 80;
+    --sidebar: 0.12 0.04 160;
+    --sidebar-foreground: 0.90 0.02 145;
+    --sidebar-primary: 0.68 0.14 145;
+    --sidebar-primary-foreground: 0.10 0.04 155;
+    --sidebar-accent: 0.20 0.06 155;
+    --sidebar-accent-foreground: 0.90 0.02 145;
+    --sidebar-border: 0.22 0.06 155;
+    --sidebar-ring: 0.55 0.12 145;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-jakarta;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1, h2, h3 {
+    @apply font-bricolage;
+  }
+}
+
+@layer utilities {
+  .badge-green {
+    background-color: oklch(var(--green-badge));
+    color: oklch(var(--green-badge-text));
+  }
+  .badge-yellow {
+    background-color: oklch(var(--yellow-badge));
+    color: oklch(var(--yellow-badge-text));
+  }
+  .badge-red {
+    background-color: oklch(var(--red-badge));
+    color: oklch(var(--red-badge-text));
+  }
+  .badge-blue {
+    background-color: oklch(var(--blue-badge));
+    color: oklch(var(--blue-badge-text));
+  }
+
+  /* Batik pattern overlay */
+  .batik-bg {
+    background-image:
+      repeating-linear-gradient(
+        45deg,
+        oklch(var(--primary) / 0.04) 0px,
+        oklch(var(--primary) / 0.04) 2px,
+        transparent 2px,
+        transparent 16px
+      ),
+      repeating-linear-gradient(
+        -45deg,
+        oklch(var(--primary) / 0.03) 0px,
+        oklch(var(--primary) / 0.03) 2px,
+        transparent 2px,
+        transparent 16px
+      );
+  }
+}
