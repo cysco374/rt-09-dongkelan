@@ -160,7 +160,7 @@ export default function PublicLayout({
 
       <main className="flex-1">{children}</main>
 
-      <footer className="hero-mesh text-sidebar-foreground mt-16">
+      <footer className="hero-mesh text-sidebar-foreground">
         <div className="container max-w-6xl mx-auto px-4 py-12">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
