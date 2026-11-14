@@ -10,6 +10,7 @@ import {
 import DashboardLayout from "./layouts/DashboardLayout";
 import PublicLayout from "./layouts/PublicLayout";
 import HomePage from "./pages/HomePage";
+import LayananPage from "./pages/LayananPage";
 import LoginPage from "./pages/LoginPage";
 import PengumumanPublicPage from "./pages/PengumumanPublicPage";
 import DashboardHome from "./pages/dashboard/DashboardHome";
@@ -50,6 +51,12 @@ const pengumumanPublicRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/pengumuman",
   component: PengumumanPublicPage,
+});
+
+const layananRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/layanan",
+  component: LayananPage,
 });
 
 const loginRoute = createRoute({
@@ -131,7 +138,12 @@ const dashboardPengaturanRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  publicLayoutRoute.addChildren([homeRoute, pengumumanPublicRoute, loginRoute]),
+  publicLayoutRoute.addChildren([
+    homeRoute,
+    pengumumanPublicRoute,
+    layananRoute,
+    loginRoute,
+  ]),
   dashboardLayoutRoute.addChildren([
     dashboardHomeRoute,
     dashboardWargaRoute,

@@ -1,8 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "@tanstack/react-router";
-import { Bell, Home, LogIn, Menu, X } from "lucide-react";
+import { Bell, ConciergeBell, Home, LogIn, Menu, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const navItems = [
   { label: "Beranda", to: "/", icon: Home, ocid: "nav.home_link" },
@@ -12,41 +12,63 @@ const navItems = [
     icon: Bell,
     ocid: "nav.pengumuman_link",
   },
-  { label: "Login Admin", to: "/login", icon: LogIn, ocid: "nav.login_link" },
+  {
+    label: "Layanan Warga",
+    to: "/layanan",
+    icon: ConciergeBell,
+    ocid: "nav.layanan_link",
+  },
 ];
 
 export default function PublicLayout({
   children,
 }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: close menu on route change
+  useEffect(() => {
+    setMobileOpen(false);
+    window.scrollTo({ top: 0 });
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-card/95 backdrop-blur-md border-b border-border shadow-xs">
+      <header
+        className={`sticky top-0 z-50 transition-all duration-300 ${
+          scrolled
+            ? "bg-card/90 backdrop-blur-xl border-b border-border shadow-xs"
+            : "bg-card/70 backdrop-blur-md border-b border-transparent"
+        }`}
+      >
         <div className="container max-w-6xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
-            {/* Logo + Name */}
             <Link
               to="/"
               className="flex items-center gap-3 group"
-              data-ocid="nav.home_link"
+              data-ocid="nav.logo_link"
             >
-              <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bricolage font-bold text-lg shadow-xs transition-transform group-hover:scale-105">
-                RT
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-700 flex items-center justify-center text-primary-foreground font-bricolage font-bold shadow-card transition-transform group-hover:rotate-[-4deg] group-hover:scale-105">
+                09
               </div>
               <div className="hidden sm:block">
-                <div className="font-bricolage font-bold text-foreground text-sm leading-tight">
+                <div className="font-bricolage font-bold text-foreground leading-tight">
                   RT 09 Dongkelan
                 </div>
                 <div className="text-muted-foreground text-xs">
-                  Kampung Dongkelan
+                  Sistem Informasi Warga
                 </div>
               </div>
             </Link>
 
-            {/* Desktop Nav */}
             <nav className="hidden md:flex items-center gap-1">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.to;
@@ -55,10 +77,10 @@ export default function PublicLayout({
                     key={item.to}
                     to={item.to}
                     data-ocid={item.ocid}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    className={`relative flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
                       isActive
                         ? "bg-primary text-primary-foreground shadow-xs"
-                        : "text-foreground hover:bg-secondary hover:text-secondary-foreground"
+                        : "text-foreground/80 hover:bg-secondary hover:text-secondary-foreground"
                     }`}
                   >
                     <item.icon className="w-4 h-4" />
@@ -66,9 +88,19 @@ export default function PublicLayout({
                   </Link>
                 );
               })}
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="ml-2 rounded-full"
+              >
+                <Link to="/login" data-ocid="nav.login_link">
+                  <LogIn className="w-4 h-4 mr-1.5" />
+                  Admin
+                </Link>
+              </Button>
             </nav>
 
-            {/* Mobile Menu Toggle */}
             <Button
               variant="ghost"
               size="icon"
@@ -85,25 +117,31 @@ export default function PublicLayout({
           </div>
         </div>
 
-        {/* Mobile Nav */}
         <AnimatePresence>
           {mobileOpen && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="md:hidden border-t border-border bg-card"
+              className="md:hidden border-t border-border bg-card overflow-hidden"
             >
               <nav className="container px-4 py-3 flex flex-col gap-1">
-                {navItems.map((item) => {
+                {[
+                  ...navItems,
+                  {
+                    label: "Login Admin",
+                    to: "/login",
+                    icon: LogIn,
+                    ocid: "nav.login_link",
+                  },
+                ].map((item) => {
                   const isActive = location.pathname === item.to;
                   return (
                     <Link
                       key={item.to}
                       to={item.to}
-                      data-ocid={item.ocid}
-                      onClick={() => setMobileOpen(false)}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-all ${
+                      data-ocid={`${item.ocid}.mobile`}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                         isActive
                           ? "bg-primary text-primary-foreground"
                           : "text-foreground hover:bg-secondary"
@@ -120,34 +158,29 @@ export default function PublicLayout({
         </AnimatePresence>
       </header>
 
-      {/* Main Content */}
       <main className="flex-1">{children}</main>
 
-      {/* Footer */}
-      <footer className="bg-sidebar text-sidebar-foreground py-10 mt-16">
-        <div className="container max-w-6xl mx-auto px-4">
+      <footer className="hero-mesh text-sidebar-foreground mt-16">
+        <div className="container max-w-6xl mx-auto px-4 py-12">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bricolage font-bold text-lg">
-                  RT
+                <div className="w-10 h-10 rounded-xl bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center font-bricolage font-bold">
+                  09
                 </div>
                 <div>
-                  <div className="font-bricolage font-bold text-lg">
+                  <div className="font-bricolage font-bold text-lg text-white">
                     RT 09 Dongkelan
                   </div>
-                  <div className="text-sidebar-foreground/70 text-xs">
-                    Kampung Dongkelan
-                  </div>
+                  <div className="text-white/60 text-xs">Kampung Dongkelan</div>
                 </div>
               </div>
-              <p className="text-sm text-sidebar-foreground/70 leading-relaxed">
-                Melayani warga dengan sepenuh hati untuk kampung yang lebih
-                baik.
+              <p className="text-sm text-white/70 leading-relaxed">
+                Melayani warga dengan transparan, cepat, dan penuh kebersamaan.
               </p>
             </div>
             <div>
-              <h4 className="font-bricolage font-semibold mb-3 text-sm uppercase tracking-wider text-sidebar-foreground/60">
+              <h4 className="font-bricolage font-semibold mb-3 text-xs uppercase tracking-[0.18em] text-white/50">
                 Navigasi
               </h4>
               <ul className="space-y-2">
@@ -155,7 +188,7 @@ export default function PublicLayout({
                   <li key={item.to}>
                     <Link
                       to={item.to}
-                      className="text-sm text-sidebar-foreground/80 hover:text-sidebar-foreground transition-colors"
+                      className="text-sm text-white/80 hover:text-white transition-colors"
                     >
                       {item.label}
                     </Link>
@@ -164,26 +197,19 @@ export default function PublicLayout({
               </ul>
             </div>
             <div>
-              <h4 className="font-bricolage font-semibold mb-3 text-sm uppercase tracking-wider text-sidebar-foreground/60">
+              <h4 className="font-bricolage font-semibold mb-3 text-xs uppercase tracking-[0.18em] text-white/50">
                 Kontak
               </h4>
-              <p className="text-sm text-sidebar-foreground/80 leading-relaxed">
+              <p className="text-sm text-white/80 leading-relaxed">
                 Kampung Dongkelan, RT 09
                 <br />
                 Yogyakarta, DIY
               </p>
             </div>
           </div>
-          <div className="border-t border-sidebar-border mt-8 pt-6 text-center text-xs text-sidebar-foreground/50">
-            © {new Date().getFullYear()}. Built with ❤️ using{" "}
-            <a
-              href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-sidebar-foreground transition-colors"
-            >
-              caffeine.ai
-            </a>
+          <div className="border-t border-white/10 mt-8 pt-6 text-center text-xs text-white/50">
+            © {new Date().getFullYear()} RT 09 Dongkelan. Dibuat dengan ❤️ untuk
+            warga.
           </div>
         </div>
       </footer>
