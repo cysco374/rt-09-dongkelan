@@ -1,15 +1,15 @@
-const SESSION_KEY = "rt09_admin_session";
+import { getToken, setToken } from "../api/client";
 
 export function isLoggedIn(): boolean {
-  return localStorage.getItem(SESSION_KEY) === "true";
+  return !!getToken();
 }
 
-export function login(): void {
-  localStorage.setItem(SESSION_KEY, "true");
+export function login(token: string): void {
+  setToken(token);
 }
 
 export function logout(): void {
-  localStorage.removeItem(SESSION_KEY);
+  setToken(null);
 }
 
 const useAdminAuth = { isLoggedIn, login, logout };

@@ -23,14 +23,10 @@ import {
 import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { api } from "../api/client";
+import type { PortalLookup } from "../api/client";
 import { Status, Status__2, Type, Type__1 } from "../backend.d";
-import type { WargaData } from "../backend.d";
-import {
-  useAddSurat,
-  useListIuran,
-  useListSurat,
-  useListWarga,
-} from "../hooks/useQueries";
+import type { IuranData, SuratData } from "../backend.d";
 
 const BULAN = [
   "Januari",
@@ -76,18 +72,14 @@ const rp = (n: number) =>
     minimumFractionDigits: 0,
   }).format(n);
 
-function IuranTab({ warga }: { warga: WargaData }) {
-  const { data: iuran = [], isLoading } = useListIuran();
+function IuranTab({ iuran }: { iuran: IuranData[] }) {
   const mine = useMemo(
     () =>
-      iuran
-        .filter((i) => i.wargaId === warga.id)
-        .sort(
-          (a, b) =>
-            Number(b.year) - Number(a.year) ||
-            Number(b.month) - Number(a.month),
-        ),
-    [iuran, warga.id],
+      [...iuran].sort(
+        (a, b) =>
+          Number(b.year) - Number(a.year) || Number(b.month) - Number(a.month),
+      ),
+    [iuran],
   );
   const tunggakan = mine
     .filter((i) => i.status === Status__2.unpaid)
@@ -95,9 +87,6 @@ function IuranTab({ warga }: { warga: WargaData }) {
   const lunas = mine
     .filter((i) => i.status === Status__2.paid)
     .reduce((s, i) => s + Number(i.total), 0);
-
-  if (isLoading)
-    return <p className="text-sm text-muted-foreground py-6">Memuat data…</p>;
 
   return (
     <div className="space-y-4">
@@ -165,18 +154,18 @@ function IuranTab({ warga }: { warga: WargaData }) {
   );
 }
 
-function SuratTab({ warga }: { warga: WargaData }) {
-  const { data: surat = [] } = useListSurat();
-  const addSurat = useAddSurat();
+function SuratTab({
+  nik,
+  surat,
+  onSubmitted,
+}: { nik: string; surat: SuratData[]; onSubmitted: () => Promise<void> }) {
+  const [pending, setPending] = useState(false);
   const [jenis, setJenis] = useState<Type>(Type.domicile);
   const [keperluan, setKeperluan] = useState("");
 
   const mine = useMemo(
-    () =>
-      surat
-        .filter((s) => s.wargaId === warga.id)
-        .sort((a, b) => b.requestDate.localeCompare(a.requestDate)),
-    [surat, warga.id],
+    () => [...surat].sort((a, b) => b.requestDate.localeCompare(a.requestDate)),
+    [surat],
   );
 
   const submit = async (e: React.FormEvent) => {
@@ -185,23 +174,18 @@ function SuratTab({ warga }: { warga: WargaData }) {
       toast.error("Keperluan surat wajib diisi.");
       return;
     }
+    setPending(true);
     try {
-      await addSurat.mutateAsync({
-        id: "",
-        wargaId: warga.id,
-        applicant: warga.fullName,
-        suratType: jenis,
-        purpose: keperluan.trim(),
-        status: Status.waiting,
-        requestDate: new Date().toISOString().slice(0, 10),
-        completionDate: undefined,
-        notes: undefined,
-        createdAt: BigInt(0),
-      });
+      await api.portalSubmitSurat(nik, jenis, keperluan.trim());
       setKeperluan("");
+      await onSubmitted();
       toast.success("Pengajuan terkirim. Pengurus RT akan memprosesnya.");
-    } catch {
-      toast.error("Gagal mengirim pengajuan. Coba lagi.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Gagal mengirim pengajuan.",
+      );
+    } finally {
+      setPending(false);
     }
   };
 
@@ -239,13 +223,11 @@ function SuratTab({ warga }: { warga: WargaData }) {
         </div>
         <Button
           type="submit"
-          disabled={addSurat.isPending}
+          disabled={pending}
           className="w-full"
           data-ocid="layanan.surat.submit_button"
         >
-          {addSurat.isPending && (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          )}
+          {pending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
           Kirim pengajuan
         </Button>
       </form>
@@ -298,17 +280,40 @@ function SuratTab({ warga }: { warga: WargaData }) {
 }
 
 export default function LayananPage() {
-  const { data: wargaList = [], isLoading } = useListWarga();
   const [nik, setNik] = useState("");
-  const [warga, setWarga] = useState<WargaData | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  const [data, setData] = useState<PortalLookup | null>(null);
+  const [checkedNik, setCheckedNik] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const verify = (e: React.FormEvent) => {
-    e.preventDefault();
-    const found = wargaList.find((w) => w.nik === nik.trim());
-    setWarga(found ?? null);
-    setNotFound(!found);
+  const lookup = async (n: string) => {
+    const res = await api.portalLookup(n);
+    setData(res);
+    setCheckedNik(n);
+    setError(
+      res
+        ? null
+        : "NIK tidak ditemukan. Hubungi pengurus RT untuk pendaftaran data.",
+    );
   };
+
+  const verify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await lookup(nik.trim());
+    } catch (err) {
+      setData(null);
+      setError(
+        err instanceof Error ? err.message : "Gagal memuat data. Coba lagi.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const warga = data?.warga ?? null;
+  const notFound = !!error;
 
   return (
     <div className="page-gradient">
@@ -339,7 +344,7 @@ export default function LayananPage() {
                 value={nik}
                 onChange={(e) => {
                   setNik(e.target.value.replace(/\D/g, "").slice(0, 16));
-                  setNotFound(false);
+                  setError(null);
                 }}
                 placeholder="Masukkan 16 digit NIK"
                 className="pl-9 h-11"
@@ -349,7 +354,7 @@ export default function LayananPage() {
             <Button
               type="submit"
               size="lg"
-              disabled={nik.length < 16 || isLoading}
+              disabled={nik.length < 16 || loading}
               data-ocid="layanan.nik.submit_button"
             >
               <ShieldCheck className="w-4 h-4 mr-2" />
@@ -361,7 +366,7 @@ export default function LayananPage() {
               className="text-sm text-destructive mt-3"
               data-ocid="layanan.nik.error_state"
             >
-              NIK tidak ditemukan. Hubungi pengurus RT untuk pendaftaran data.
+              {error}
             </p>
           )}
         </motion.div>
@@ -398,10 +403,14 @@ export default function LayananPage() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="iuran" className="mt-5">
-                <IuranTab warga={warga} />
+                <IuranTab iuran={data?.iuran ?? []} />
               </TabsContent>
               <TabsContent value="surat" className="mt-5">
-                <SuratTab warga={warga} />
+                <SuratTab
+                  nik={checkedNik}
+                  surat={data?.surat ?? []}
+                  onSubmitted={() => lookup(checkedNik)}
+                />
               </TabsContent>
             </Tabs>
           </motion.div>

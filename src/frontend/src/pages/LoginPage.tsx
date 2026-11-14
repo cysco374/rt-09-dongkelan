@@ -35,20 +35,18 @@ export default function LoginPage() {
 
     try {
       const passwordHash = await sha256(password);
-      const isValid = await actor.verifyAdminCredentials(
-        username.trim(),
-        passwordHash,
-      );
-
-      if (isValid) {
-        saveSession();
-        navigate({ to: "/dashboard" });
-      } else {
-        setLoginError("Username atau password salah. Silakan coba lagi.");
-      }
+      const token = await actor.login(username.trim(), passwordHash);
+      saveSession(token);
+      navigate({ to: "/dashboard" });
     } catch (err) {
-      console.error("Login error:", err);
-      setLoginError("Gagal memverifikasi kredensial. Silakan coba lagi.");
+      const status = (err as { status?: number }).status;
+      setLoginError(
+        status === 401
+          ? "Username atau password salah. Silakan coba lagi."
+          : status === 429
+            ? "Terlalu banyak percobaan. Coba lagi sebentar lagi."
+            : "Gagal memverifikasi kredensial. Silakan coba lagi.",
+      );
     } finally {
       setIsVerifying(false);
     }
