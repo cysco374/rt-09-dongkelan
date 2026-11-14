@@ -196,3 +196,9 @@
       );
   }
 }
+
+/* Sembunyikan widget floating dari ekstensi browser pihak ketiga (MaxAI) agar tidak menambah ruang di bawah footer */
+use-chat-gpt-ai-content-menu,
+[id^="USE_CHAT_GPT_AI_ROOT"] {
+  display: none !important;
+}
