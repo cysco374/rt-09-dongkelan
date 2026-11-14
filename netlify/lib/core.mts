@@ -366,6 +366,124 @@ methods.portalSubmitSurat = {
   },
 };
 
+// ---------- demo data (admin only, only when empty) ----------
+const DEMO_KK: { no: string; head: string; address: string; members: [string, string, string, string, string][] }[] = [
+  { no: "3402010101260001", head: "Slamet Riyadi", address: "Jl. Dongkelan No. 12, RT 09", members: [
+    ["Slamet Riyadi", "male", "1978-03-14", "Wiraswasta", "kawin"],
+    ["Sri Wahyuni", "female", "1981-07-22", "Ibu Rumah Tangga", "kawin"],
+    ["Bagas Riyadi", "male", "2004-11-02", "Mahasiswa", "belum kawin"],
+    ["Ayu Riyadi", "female", "2009-05-19", "Pelajar", "belum kawin"] ] },
+  { no: "3402010101260002", head: "Agus Setiawan", address: "Jl. Dongkelan No. 14, RT 09", members: [
+    ["Agus Setiawan", "male", "1985-01-09", "Guru", "kawin"],
+    ["Dewi Lestari", "female", "1987-09-30", "Perawat", "kawin"],
+    ["Raka Setiawan", "male", "2013-04-11", "Pelajar", "belum kawin"] ] },
+  { no: "3402010101260003", head: "Suparman", address: "Jl. Dongkelan No. 21, RT 09", members: [
+    ["Suparman", "male", "1960-12-05", "Pensiunan", "kawin"],
+    ["Sumiyati", "female", "1963-02-17", "Ibu Rumah Tangga", "kawin"] ] },
+  { no: "3402010101260004", head: "Nur Hidayat", address: "Gang Melati No. 3, RT 09", members: [
+    ["Nur Hidayat", "male", "1990-06-25", "Karyawan Swasta", "kawin"],
+    ["Fitri Handayani", "female", "1992-10-08", "Pedagang", "kawin"],
+    ["Alya Hidayat", "female", "2018-08-14", "Pelajar", "belum kawin"],
+    ["Fajar Hidayat", "male", "2021-01-27", "Belum Bekerja", "belum kawin"] ] },
+  { no: "3402010101260005", head: "Widodo Prasetyo", address: "Gang Melati No. 7, RT 09", members: [
+    ["Widodo Prasetyo", "male", "1972-04-03", "Sopir", "kawin"],
+    ["Endang Purwanti", "female", "1975-11-21", "Penjahit", "kawin"],
+    ["Dimas Prasetyo", "male", "2000-09-12", "Karyawan Swasta", "belum kawin"] ] },
+  { no: "3402010101260006", head: "Rina Marlina", address: "Jl. Dongkelan No. 30, RT 09", members: [
+    ["Rina Marlina", "female", "1988-02-28", "Apoteker", "cerai hidup"],
+    ["Kevin Marlina", "male", "2012-12-01", "Pelajar", "belum kawin"] ] },
+];
+const DEMO_FASILITAS = [
+  { name: "Balai Pertemuan RT 09", fasilitasType: "building", condition: "good", acquisitionYear: 2012, location: "Jl. Dongkelan, depan lapangan", description: "Tempat rapat warga, arisan, dan kegiatan kampung. Kapasitas ±60 orang." },
+  { name: "Pos Ronda", fasilitasType: "building", condition: "lightDamage", acquisitionYear: 2015, location: "Perempatan Gang Melati", description: "Pos jaga ronda malam. Atap bocor di sisi timur, perlu diperbaiki." },
+  { name: "Tenda Pesta 4x6 m (2 unit)", fasilitasType: "equipment", condition: "good", acquisitionYear: 2019, location: "Gudang Balai RT", description: "Dapat dipinjam warga untuk hajatan. Pinjam melalui pengurus." },
+  { name: "Kursi Plastik (100 buah)", fasilitasType: "equipment", condition: "good", acquisitionYear: 2018, location: "Gudang Balai RT", description: "Inventaris kursi untuk kegiatan RT dan peminjaman warga." },
+  { name: "Sound System Portable", fasilitasType: "equipment", condition: "lightDamage", acquisitionYear: 2020, location: "Rumah Ketua RT", description: "Speaker dan mixer untuk acara. Salah satu mic perlu diganti." },
+  { name: "Motor Roda Tiga Pengangkut Sampah", fasilitasType: "vehicle", condition: "good", acquisitionYear: 2021, location: "Garasi Balai RT", description: "Pengangkut sampah keliling kampung, jadwal Selasa dan Sabtu." },
+  { name: "Tandon Air & Hidran Lingkungan", fasilitasType: "other", condition: "heavyDamage", acquisitionYear: 2010, location: "Ujung Gang Melati", description: "Cadangan air untuk pemadaman kebakaran. Pompa rusak, perlu penggantian." },
+  { name: "Taman & Lapangan Bulu Tangkis", fasilitasType: "other", condition: "good", acquisitionYear: 2016, location: "Depan Balai RT", description: "Fasilitas olahraga dan ruang bermain anak." },
+];
+
+methods.seedDemo = {
+  auth: true,
+  fn: async ({ store }) => {
+    const exist = await Promise.all(
+      (["warga", "kk", "iuran", "fasilitas"] as const).map((c) =>
+        store.list({ prefix: `${c}/` }),
+      ),
+    );
+    if (exist.some((e) => e.blobs.length > 0))
+      throw new HttpError(409, "Data sudah ada. Data contoh hanya bisa diisi saat data masih kosong.");
+
+    const writes: Promise<unknown>[] = [];
+    const put = (c: string, obj: Json) => {
+      const id = newId(c);
+      writes.push(store.setJSON(`${c}/${id}`, { ...obj, id, createdAt: Date.now() }));
+      return id;
+    };
+    const heads: { id: string; name: string }[] = [];
+    let seq = 1;
+    for (const kk of DEMO_KK) {
+      put("kk", {
+        number: kk.no,
+        head: kk.head,
+        address: kk.address,
+        members: kk.members.map((m) => m[0]),
+      });
+      for (const [name, gender, dob, job, marital] of kk.members) {
+        const id = put("warga", {
+          nik: `340201${String(seq++).padStart(10, "0")}`,
+          fullName: name,
+          dob,
+          gender,
+          address: kk.address,
+          phone: `0812${String(30000000 + seq * 7919).slice(0, 8)}`,
+          status: "tetap",
+          kkNumber: kk.no,
+          maritalStatus: marital,
+          job,
+        });
+        if (name === kk.head) heads.push({ id, name });
+      }
+    }
+
+    // Iuran 3 bulan terakhir (WIB), dibayar per kepala keluarga
+    const now = new Date(Date.now() + 7 * 3600 * 1000);
+    const months: { m: number; y: number }[] = [];
+    for (let i = 2; i >= 0; i--) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+      months.push({ m: d.getUTCMonth() + 1, y: d.getUTCFullYear() });
+    }
+    const pad = (n: number) => String(n).padStart(2, "0");
+    heads.forEach((h, hi) => {
+      months.forEach(({ m, y }, mi) => {
+        const isCurrent = mi === months.length - 1;
+        const kinds: [string, number][] = [["monthly", 25000]];
+        if (isCurrent || mi === months.length - 2) kinds.push(["security", 20000], ["cleaning", 10000]);
+        for (const [type, total] of kinds) {
+          // bulan lalu lunas semua; bulan berjalan sebagian belum bayar
+          const paid = !isCurrent || (hi + (type === "monthly" ? 0 : 1)) % 3 !== 0;
+          put("iuran", {
+            wargaId: h.id,
+            wargaName: h.name,
+            iuranType: type,
+            month: m,
+            year: y,
+            total,
+            status: paid ? "paid" : "unpaid",
+            ...(paid ? { paymentDate: `${y}-${pad(m)}-${pad(3 + ((hi * 2 + mi) % 18))}` } : {}),
+          });
+        }
+      });
+    });
+
+    for (const f of DEMO_FASILITAS) put("fasilitas", f);
+    await Promise.all(writes);
+    await store.delete("meta/stats");
+    return { kk: DEMO_KK.length, warga: seq - 1, fasilitas: DEMO_FASILITAS.length };
+  },
+};
+
 methods.login = {
   auth: false,
   fn: async ({ store, env }, [username, passwordHash]) => {

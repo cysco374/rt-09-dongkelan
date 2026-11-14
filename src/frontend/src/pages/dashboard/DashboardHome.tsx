@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -9,9 +10,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Bell,
+  DatabaseZap,
   FileText,
   Home,
   TrendingUp,
@@ -19,7 +22,9 @@ import {
   Wallet,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { api } from "../../api/client";
 import { Category, Status__1, Status__2 } from "../../backend.d";
 import {
   useListIuran,
@@ -89,6 +94,27 @@ export default function DashboardHome() {
     useListPengumuman();
 
   const { data: iuranList = [] } = useListIuran();
+  const queryClient = useQueryClient();
+  const [seeding, setSeeding] = useState(false);
+  const isEmpty =
+    !!stats && Number(stats.totalWarga) === 0 && Number(stats.totalKK) === 0;
+
+  const seedDemo = async () => {
+    setSeeding(true);
+    try {
+      const r = await api.seedDemo();
+      await queryClient.invalidateQueries();
+      toast.success(
+        `Data contoh ditambahkan: ${r.kk} KK, ${r.warga} warga, iuran, dan ${r.fasilitas} fasilitas.`,
+      );
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Gagal menambah data contoh",
+      );
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const totalSaldo = useMemo(
     () =>
@@ -116,6 +142,29 @@ export default function DashboardHome() {
 
   return (
     <div className="space-y-6">
+      {isEmpty && (
+        <div
+          className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between rounded-2xl border border-dashed border-primary/40 bg-primary/5 p-4"
+          data-ocid="dashboard.seed.card"
+        >
+          <div>
+            <p className="font-semibold">Data masih kosong</p>
+            <p className="text-sm text-muted-foreground">
+              Isi data contoh (6 KK dengan anggotanya, iuran 3 bulan, dan
+              fasilitas &amp; aset) untuk mencoba semua fitur.
+            </p>
+          </div>
+          <Button
+            onClick={seedDemo}
+            disabled={seeding}
+            data-ocid="dashboard.seed.button"
+          >
+            <DatabaseZap className="w-4 h-4 mr-2" />
+            {seeding ? "Mengisi…" : "Isi Data Contoh"}
+          </Button>
+        </div>
+      )}
+
       {/* Page Title */}
       <div className="hero-mesh-batik rounded-2xl p-6 md:p-8 text-white shadow-card">
         <p className="eyebrow !text-sidebar-primary">

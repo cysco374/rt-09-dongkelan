@@ -88,4 +88,27 @@ assert.equal((await call("login", ["pengurus", h("baru12345")], "")).status, 200
 assert.equal((await call("deleteWarga", [wid])).status, 200);
 assert.equal((await call("deleteWarga", [wid])).status, 404);
 assert.equal((await call("nope", [], "")).status, 404);
+// seed demo on empty store
+mem.clear();
+await call("login", ["admin", h("rahasia123")], "").then((r) => { token = r.result; });
+assert.equal((await call("seedDemo", [], "")).status, 401);
+const seeded = await call("seedDemo");
+assert.equal(seeded.status, 200, JSON.stringify(seeded));
+const kks = (await call("listKK")).result;
+const wargas = (await call("listWarga")).result;
+const iur = (await call("listIuran")).result;
+const fas = (await call("listFasilitas")).result;
+assert.equal(kks.length, 6);
+assert.equal(wargas.length, 18);
+assert.ok(fas.length === 8 && iur.length > 30);
+for (const k of kks) {
+  const m = wargas.filter((w: any) => w.kkNumber === k.number).map((w: any) => w.fullName).sort();
+  assert.deepEqual(m, [...k.members].sort(), "KK members match warga");
+  assert.ok(m.includes(k.head));
+}
+assert.equal(new Set(wargas.map((w: any) => w.nik)).size, 18, "NIK unique");
+assert.ok(wargas.every((w: any) => /^\d{16}$/.test(w.nik)));
+assert.ok(iur.every((i: any) => wargas.some((w: any) => w.id === i.wargaId)));
+assert.ok(iur.some((i: any) => i.status === "unpaid") && iur.some((i: any) => i.status === "paid"));
+assert.equal((await call("seedDemo")).status, 409, "no double seed");
 console.log("ALL OK");

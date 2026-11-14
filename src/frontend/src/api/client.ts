@@ -71,6 +71,7 @@ export interface PortalLookup {
 export interface ApiActor extends backendInterface {
   login(username: string, passwordHash: string): Promise<string>;
   portalLookup(nik: string): Promise<PortalLookup | null>;
+  seedDemo(): Promise<{ kk: number; warga: number; fasilitas: number }>;
   portalSubmitSurat(
     nik: string,
     suratType: string,
