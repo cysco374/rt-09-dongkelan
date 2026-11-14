@@ -5,12 +5,14 @@ import { Link } from "@tanstack/react-router";
 import {
   Bell,
   ChevronRight,
+  FileText,
   Home,
   Mail,
   MapPin,
   Megaphone,
   Phone,
   Users,
+  Wallet,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Category, Status__1 } from "../backend.d";
@@ -44,7 +46,7 @@ function PengumumanCard({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ delay: index * 0.1 }}
-      className="bg-card border border-border rounded-xl p-5 shadow-card hover:shadow-card-hover transition-shadow"
+      className="bg-card border border-border rounded-2xl p-5 shadow-card card-lift"
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <span
@@ -218,7 +220,7 @@ export default function HomePage() {
           }}
         />
         {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-sidebar/95 via-sidebar/80 to-sidebar/40" />
+        <div className="absolute inset-0 bg-gradient-to-r from-sidebar/95 via-sidebar/85 to-sidebar/50" />
         {/* Batik pattern overlay */}
         <div className="absolute inset-0 batik-bg opacity-40" />
 
@@ -236,7 +238,7 @@ export default function HomePage() {
             <h1 className="font-bricolage font-bold text-4xl sm:text-5xl md:text-6xl text-white leading-tight mb-4">
               RT 09
               <br />
-              <span className="text-sidebar-primary">Dongkelan</span>
+              <span className="text-gradient">Dongkelan</span>
             </h1>
             <p className="text-white/80 text-lg leading-relaxed mb-8 max-w-md">
               {settings?.description ||
@@ -257,10 +259,10 @@ export default function HomePage() {
                 asChild
                 variant="outline"
                 size="lg"
-                className="bg-white/10 border-white/30 text-white hover:bg-white/20"
+                className="glass text-white hover:bg-white/20 hover:text-white"
               >
-                <Link to="/login">
-                  Login Admin
+                <Link to="/layanan" data-ocid="home.layanan_button">
+                  Layanan Warga
                   <ChevronRight className="w-4 h-4 ml-1" />
                 </Link>
               </Button>
@@ -270,7 +272,7 @@ export default function HomePage() {
       </section>
 
       {/* Stats Bar */}
-      <section className="bg-primary">
+      <section className="bg-primary -mt-px">
         <div className="container max-w-6xl mx-auto px-4 py-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {statsLoading ? (
@@ -343,6 +345,53 @@ export default function HomePage() {
               </>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* Quick services */}
+      <section className="container max-w-6xl mx-auto px-4 pt-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            {
+              icon: Wallet,
+              title: "Cek Iuran",
+              text: "Lihat riwayat dan tunggakan iuran dengan NIK Anda.",
+            },
+            {
+              icon: FileText,
+              title: "Ajukan Surat",
+              text: "Domisili, SKTM, hingga pengantar KTP/KK secara online.",
+            },
+            {
+              icon: Megaphone,
+              title: "Info Terkini",
+              text: "Pengumuman kerja bakti, ronda, dan kegiatan kampung.",
+            },
+          ].map((f, i) => (
+            <motion.div
+              key={f.title}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.1 }}
+            >
+              <Link
+                to={f.title === "Info Terkini" ? "/pengumuman" : "/layanan"}
+                className="group block h-full bg-card border border-border rounded-2xl p-6 shadow-card card-lift"
+                data-ocid={`home.service.${i + 1}`}
+              >
+                <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-4 transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <f.icon className="w-6 h-6" />
+                </div>
+                <h3 className="font-bricolage font-semibold text-lg">
+                  {f.title}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                  {f.text}
+                </p>
+              </Link>
+            </motion.div>
+          ))}
         </div>
       </section>
 

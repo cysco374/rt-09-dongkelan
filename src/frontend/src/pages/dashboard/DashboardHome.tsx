@@ -117,12 +117,20 @@ export default function DashboardHome() {
   return (
     <div className="space-y-6">
       {/* Page Title */}
-      <div>
-        <h1 className="font-bricolage font-bold text-2xl text-foreground">
-          Selamat Datang di Panel Admin
+      <div className="hero-mesh-batik rounded-2xl p-6 md:p-8 text-white shadow-card">
+        <p className="eyebrow !text-sidebar-primary">
+          {new Date().toLocaleDateString("id-ID", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })}
+        </p>
+        <h1 className="font-bricolage font-bold text-2xl md:text-3xl mt-1">
+          Selamat datang, Pengurus RT 09
         </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          RT 09 Kampung Dongkelan — Ringkasan statistik terkini
+        <p className="text-white/70 text-sm mt-1">
+          Ringkasan data warga, keuangan, dan layanan terkini.
         </p>
       </div>
 
@@ -135,7 +143,7 @@ export default function DashboardHome() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.08 }}
           >
-            <Card className="shadow-card hover:shadow-card-hover transition-shadow">
+            <Card className="shadow-card card-lift rounded-2xl">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between mb-3">
                   <div

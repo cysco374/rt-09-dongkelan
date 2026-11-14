@@ -105,14 +105,15 @@ export default function DashboardLayout({
     navigate({ to: "/login" });
   };
 
+  // Never render admin content without a session (prevents a flash before redirect)
+  if (!isLoggedIn()) return null;
+
   const currentItem = sidebarItems.find(
     (item) => location.pathname === item.to,
   );
 
   return (
-    <div className="min-h-screen flex bg-muted/30">
-      <Toaster position="top-right" />
-
+    <div className="min-h-screen flex bg-muted/30 page-gradient">
       {/* Desktop Sidebar */}
       <aside
         className={`hidden lg:flex flex-col bg-sidebar text-sidebar-foreground transition-all duration-300 ${
@@ -123,8 +124,8 @@ export default function DashboardLayout({
         <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
           {sidebarOpen && (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-md bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bricolage font-bold text-sm">
-                RT
+              <div className="w-8 h-8 rounded-md bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bricolage font-bold text-sm shadow-card">
+                09
               </div>
               <div>
                 <div className="font-bricolage font-bold text-sm leading-tight">
@@ -161,7 +162,7 @@ export default function DashboardLayout({
                 data-ocid={item.ocid}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-card"
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 } ${!sidebarOpen ? "justify-center" : ""}`}
                 title={!sidebarOpen ? item.label : undefined}
@@ -270,7 +271,7 @@ export default function DashboardLayout({
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
-        <header className="sticky top-0 z-30 bg-card/95 backdrop-blur-md border-b border-border px-4 md:px-6 h-16 flex items-center justify-between">
+        <header className="sticky top-0 z-30 bg-card/80 backdrop-blur-xl border-b border-border px-4 md:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {/* Mobile Menu Button */}
             <Button
@@ -305,6 +306,14 @@ export default function DashboardLayout({
               </AvatarFallback>
             </Avatar>
             <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="hidden md:inline-flex rounded-full"
+            >
+              <Link to="/">Lihat Portal</Link>
+            </Button>
+            <Button
               variant="ghost"
               size="icon"
               onClick={handleLogout}
@@ -321,15 +330,7 @@ export default function DashboardLayout({
 
         {/* Dashboard Footer */}
         <footer className="border-t border-border px-6 py-3 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()}. Built with ❤️ using{" "}
-          <a
-            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-foreground transition-colors"
-          >
-            caffeine.ai
-          </a>
+          © {new Date().getFullYear()} RT 09 Dongkelan — Panel Admin
         </footer>
       </div>
     </div>
