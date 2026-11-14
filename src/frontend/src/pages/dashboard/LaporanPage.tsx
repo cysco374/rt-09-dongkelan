@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Status__2, Type__1 } from "../../backend.d";
-import { useListIuran } from "../../hooks/useQueries";
+import { useListIuran, useListKK, useListWarga } from "../../hooks/useQueries";
 import { exportToCSV } from "../../utils/csvUtils";
 
 const typeLabels: Record<string, string> = {
@@ -59,6 +59,8 @@ function formatRp(val: number) {
 
 export default function LaporanPage() {
   const { data: iuranList = [], isLoading } = useListIuran();
+  const { data: wargaList = [] } = useListWarga();
+  const { data: kkList = [] } = useListKK();
   const currentYear = new Date().getFullYear();
   const [filterYear, setFilterYear] = useState(String(currentYear));
 
@@ -130,6 +132,53 @@ export default function LaporanPage() {
     }
     return Object.entries(map).map(([type, v]) => ({ type, ...v }));
   }, [filtered]);
+
+  const wargaReport = useMemo(() => {
+    const count = (f: (w: (typeof wargaList)[number]) => boolean) =>
+      wargaList.filter(f).length;
+    const byStatus = [
+      ["Tetap", count((w) => w.status === "tetap")],
+      ["Kontrak", count((w) => w.status === "kontrak")],
+      ["Kos", count((w) => w.status === "kos")],
+    ] as [string, number][];
+    const rows = kkList.map((k) => {
+      const ids = new Set(
+        wargaList.filter((w) => w.kkNumber === k.number).map((w) => w.id),
+      );
+      const own = filtered.filter((i) => ids.has(i.wargaId));
+      return {
+        number: k.number,
+        head: k.head,
+        members: ids.size,
+        lunas: own
+          .filter((i) => i.status === Status__2.paid)
+          .reduce((s, i) => s + Number(i.total), 0),
+        tunggakan: own
+          .filter((i) => i.status === Status__2.unpaid)
+          .reduce((s, i) => s + Number(i.total), 0),
+      };
+    });
+    return {
+      total: wargaList.length,
+      male: count((w) => w.gender === "male"),
+      female: count((w) => w.gender === "female"),
+      byStatus,
+      rows,
+    };
+  }, [wargaList, kkList, filtered]);
+
+  const handleExportWarga = () => {
+    exportToCSV(
+      wargaReport.rows.map((r) => ({
+        "Nomor KK": r.number,
+        "Kepala Keluarga": r.head,
+        "Jumlah Anggota": r.members,
+        [`Iuran Lunas ${filterYear} (Rp)`]: r.lunas,
+        [`Tunggakan ${filterYear} (Rp)`]: r.tunggakan,
+      })),
+      `laporan-warga-kk-${filterYear}.csv`,
+    );
+  };
 
   const handleExport = () => {
     exportToCSV(
@@ -330,6 +379,84 @@ export default function LaporanPage() {
                       </TableCell>
                       <TableCell className="text-center">{r.count}</TableCell>
                       <TableCell className="text-right text-emerald-600 font-medium">
+                        {formatRp(r.lunas)}
+                      </TableCell>
+                      <TableCell className="text-right text-destructive font-medium">
+                        {formatRp(r.tunggakan)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Laporan Warga per KK */}
+      <Card className="shadow-card">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between gap-3 flex-wrap">
+          <CardTitle className="font-bricolage text-base">
+            Laporan Warga &amp; Iuran per KK — {filterYear}
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportWarga}
+            data-ocid="laporan.export_warga_button"
+          >
+            <Download className="w-4 h-4 mr-1.5" />
+            Ekspor KK
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2 text-xs">
+            {[
+              ["Total warga", wargaReport.total],
+              ["Laki-laki", wargaReport.male],
+              ["Perempuan", wargaReport.female],
+              ["Jumlah KK", kkList.length],
+              ...wargaReport.byStatus,
+            ].map(([l, v]) => (
+              <span
+                key={String(l)}
+                className="px-3 py-1.5 rounded-full bg-secondary text-secondary-foreground font-medium"
+              >
+                {l}: <b>{v}</b>
+              </span>
+            ))}
+          </div>
+          {wargaReport.rows.length === 0 ? (
+            <p
+              className="text-sm text-muted-foreground text-center py-6"
+              data-ocid="laporan.warga.empty_state"
+            >
+              Belum ada data KK.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nomor KK</TableHead>
+                    <TableHead>Kepala Keluarga</TableHead>
+                    <TableHead className="text-right">Anggota</TableHead>
+                    <TableHead className="text-right">Lunas</TableHead>
+                    <TableHead className="text-right">Tunggakan</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {wargaReport.rows.map((r, i) => (
+                    <TableRow
+                      key={r.number}
+                      data-ocid={`laporan.warga.row.${i + 1}`}
+                    >
+                      <TableCell className="font-mono text-xs">
+                        {r.number}
+                      </TableCell>
+                      <TableCell className="font-medium">{r.head}</TableCell>
+                      <TableCell className="text-right">{r.members}</TableCell>
+                      <TableCell className="text-right">
                         {formatRp(r.lunas)}
                       </TableCell>
                       <TableCell className="text-right text-destructive font-medium">

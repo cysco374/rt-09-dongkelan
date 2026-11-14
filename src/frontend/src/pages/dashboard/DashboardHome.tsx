@@ -116,6 +116,23 @@ export default function DashboardHome() {
     }
   };
 
+  const seedMore = async () => {
+    setSeeding(true);
+    try {
+      const r = await api.seedDemoMore();
+      await queryClient.invalidateQueries();
+      toast.success(
+        r.kk + r.warga + r.iuran + r.fasilitas === 0
+          ? "Data contoh tambahan sudah lengkap."
+          : `Ditambahkan: ${r.kk} KK, ${r.warga} warga, ${r.iuran} iuran, ${r.fasilitas} fasilitas.`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Gagal menambah data");
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const totalSaldo = useMemo(
     () =>
       iuranList
@@ -161,6 +178,21 @@ export default function DashboardHome() {
           >
             <DatabaseZap className="w-4 h-4 mr-2" />
             {seeding ? "Mengisi…" : "Isi Data Contoh"}
+          </Button>
+        </div>
+      )}
+
+      {!isEmpty && !!stats && (
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={seedMore}
+            disabled={seeding}
+            data-ocid="dashboard.seed_more.button"
+          >
+            <DatabaseZap className="w-4 h-4 mr-2" />
+            {seeding ? "Mengisi…" : "Tambah Data Contoh Lengkap"}
           </Button>
         </div>
       )}

@@ -63,17 +63,25 @@ async function rpc<T>(method: string, args: unknown[] = []): Promise<T> {
 
 /** Portal (public) responses */
 export interface PortalLookup {
-  warga: { id: string; fullName: string; address: string; kkNumber: string };
+  kk: { number: string; head: string; address: string };
+  members: { id: string; fullName: string }[];
   iuran: import("../backend.d").IuranData[];
   surat: import("../backend.d").SuratData[];
 }
 
 export interface ApiActor extends backendInterface {
   login(username: string, passwordHash: string): Promise<string>;
-  portalLookup(nik: string): Promise<PortalLookup | null>;
+  portalLookup(key: string): Promise<PortalLookup | null>;
   seedDemo(): Promise<{ kk: number; warga: number; fasilitas: number }>;
+  seedDemoMore(): Promise<{
+    kk: number;
+    warga: number;
+    iuran: number;
+    fasilitas: number;
+  }>;
   portalSubmitSurat(
-    nik: string,
+    key: string,
+    wargaId: string,
     suratType: string,
     purpose: string,
   ): Promise<string>;
@@ -131,6 +139,8 @@ const names = [
   "login",
   "portalLookup",
   "portalSubmitSurat",
+  "seedDemo",
+  "seedDemoMore",
 ] as const;
 
 export const api = Object.fromEntries(

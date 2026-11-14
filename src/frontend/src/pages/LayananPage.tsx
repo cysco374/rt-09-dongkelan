@@ -73,18 +73,29 @@ const rp = (n: number) =>
   }).format(n);
 
 function IuranTab({ iuran }: { iuran: IuranData[] }) {
-  const mine = useMemo(
+  const years = useMemo(
     () =>
-      [...iuran].sort(
-        (a, b) =>
-          Number(b.year) - Number(a.year) || Number(b.month) - Number(a.month),
+      Array.from(new Set(iuran.map((i) => Number(i.year)))).sort(
+        (a, b) => b - a,
       ),
     [iuran],
   );
-  const tunggakan = mine
+  const [year, setYear] = useState<string>("all");
+  const rows = useMemo(
+    () =>
+      iuran
+        .filter((i) => year === "all" || String(Number(i.year)) === year)
+        .sort(
+          (a, b) =>
+            Number(b.year) - Number(a.year) ||
+            Number(b.month) - Number(a.month),
+        ),
+    [iuran, year],
+  );
+  const tunggakan = rows
     .filter((i) => i.status === Status__2.unpaid)
     .reduce((s, i) => s + Number(i.total), 0);
-  const lunas = mine
+  const lunas = rows
     .filter((i) => i.status === Status__2.paid)
     .reduce((s, i) => s + Number(i.total), 0);
 
@@ -104,16 +115,31 @@ function IuranTab({ iuran }: { iuran: IuranData[] }) {
           </p>
         </div>
       </div>
-      {mine.length === 0 ? (
+      {years.length > 1 && (
+        <Select value={year} onValueChange={setYear}>
+          <SelectTrigger className="w-40" data-ocid="layanan.iuran.select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua tahun</SelectItem>
+            {years.map((y) => (
+              <SelectItem key={y} value={String(y)}>
+                {y}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {rows.length === 0 ? (
         <p
           className="text-center text-sm text-muted-foreground py-8"
           data-ocid="layanan.iuran.empty_state"
         >
-          Belum ada catatan iuran untuk Anda.
+          Belum ada riwayat iuran untuk KK ini.
         </p>
       ) : (
         <ul className="divide-y divide-border rounded-xl border border-border bg-card">
-          {mine.map((i, idx) => (
+          {rows.map((i, idx) => (
             <li
               key={i.id}
               className="flex items-center justify-between gap-3 px-4 py-3"
@@ -126,6 +152,7 @@ function IuranTab({ iuran }: { iuran: IuranData[] }) {
                   {String(i.year)}
                 </p>
                 <p className="text-xs text-muted-foreground">
+                  {i.wargaName} ·{" "}
                   {i.status === Status__2.paid && i.paymentDate
                     ? `Dibayar ${i.paymentDate}`
                     : "Belum dibayar"}
@@ -155,11 +182,18 @@ function IuranTab({ iuran }: { iuran: IuranData[] }) {
 }
 
 function SuratTab({
-  nik,
+  lookupKey,
+  members,
   surat,
   onSubmitted,
-}: { nik: string; surat: SuratData[]; onSubmitted: () => Promise<void> }) {
+}: {
+  lookupKey: string;
+  members: { id: string; fullName: string }[];
+  surat: SuratData[];
+  onSubmitted: () => Promise<void>;
+}) {
   const [pending, setPending] = useState(false);
+  const [pemohon, setPemohon] = useState(members[0]?.id ?? "");
   const [jenis, setJenis] = useState<Type>(Type.domicile);
   const [keperluan, setKeperluan] = useState("");
 
@@ -176,7 +210,7 @@ function SuratTab({
     }
     setPending(true);
     try {
-      await api.portalSubmitSurat(nik, jenis, keperluan.trim());
+      await api.portalSubmitSurat(lookupKey, pemohon, jenis, keperluan.trim());
       setKeperluan("");
       await onSubmitted();
       toast.success("Pengajuan terkirim. Pengurus RT akan memprosesnya.");
@@ -195,6 +229,21 @@ function SuratTab({
         <h3 className="font-bricolage font-semibold flex items-center gap-2">
           <FilePlus2 className="w-4 h-4 text-primary" /> Ajukan surat baru
         </h3>
+        <div className="space-y-1.5">
+          <Label>Pemohon</Label>
+          <Select value={pemohon} onValueChange={setPemohon}>
+            <SelectTrigger data-ocid="layanan.surat.pemohon">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {members.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.fullName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="space-y-1.5">
           <Label>Jenis surat</Label>
           <Select value={jenis} onValueChange={(v) => setJenis(v as Type)}>
@@ -282,18 +331,18 @@ function SuratTab({
 export default function LayananPage() {
   const [nik, setNik] = useState("");
   const [data, setData] = useState<PortalLookup | null>(null);
-  const [checkedNik, setCheckedNik] = useState("");
+  const [checkedKey, setCheckedKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const lookup = async (n: string) => {
     const res = await api.portalLookup(n);
     setData(res);
-    setCheckedNik(n);
+    setCheckedKey(n);
     setError(
       res
         ? null
-        : "NIK tidak ditemukan. Hubungi pengurus RT untuk pendaftaran data.",
+        : "Nomor KK atau NIK tidak ditemukan. Hubungi pengurus RT untuk pendaftaran data.",
     );
   };
 
@@ -312,7 +361,7 @@ export default function LayananPage() {
     }
   };
 
-  const warga = data?.warga ?? null;
+  const kk = data?.kk ?? null;
   const notFound = !!error;
 
   return (
@@ -324,8 +373,9 @@ export default function LayananPage() {
             Urus iuran dan surat tanpa antre.
           </h1>
           <p className="text-white/75 mt-3 max-w-xl">
-            Masukkan NIK yang terdaftar di RT 09 untuk melihat riwayat iuran,
-            mengajukan surat pengantar, dan memantau statusnya.
+            Masukkan Nomor KK (atau NIK) yang terdaftar di RT 09 untuk melihat
+            riwayat iuran satu keluarga, mengajukan surat pengantar, dan
+            memantau statusnya.
           </p>
         </div>
       </section>
@@ -343,10 +393,10 @@ export default function LayananPage() {
                 inputMode="numeric"
                 value={nik}
                 onChange={(e) => {
-                  setNik(e.target.value.replace(/\D/g, "").slice(0, 16));
+                  setNik(e.target.value.replace(/\D/g, "").slice(0, 20));
                   setError(null);
                 }}
-                placeholder="Masukkan 16 digit NIK"
+                placeholder="Masukkan Nomor KK atau NIK"
                 className="pl-9 h-11"
                 data-ocid="layanan.nik.input"
               />
@@ -354,7 +404,7 @@ export default function LayananPage() {
             <Button
               type="submit"
               size="lg"
-              disabled={nik.length < 16 || loading}
+              disabled={nik.length < 10 || loading}
               data-ocid="layanan.nik.submit_button"
             >
               <ShieldCheck className="w-4 h-4 mr-2" />
@@ -371,26 +421,29 @@ export default function LayananPage() {
           )}
         </motion.div>
 
-        {warga && (
+        {kk && data && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             className="mt-6 bg-card border border-border rounded-2xl shadow-card p-5 md:p-6"
           >
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bricolage font-bold">
-                {warga.fullName
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()}
-              </div>
-              <div>
-                <p className="font-bricolage font-semibold">{warga.fullName}</p>
-                <p className="text-xs text-muted-foreground">
-                  KK {warga.kkNumber || "-"} · {warga.address}
-                </p>
+            <div className="mb-5">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                Kartu Keluarga {kk.number}
+              </p>
+              <p className="font-bricolage font-semibold text-lg">
+                Keluarga {kk.head}
+              </p>
+              <p className="text-xs text-muted-foreground">{kk.address}</p>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {data.members.map((m) => (
+                  <span
+                    key={m.id}
+                    className="px-2.5 py-1 rounded-full bg-secondary text-secondary-foreground text-xs font-medium"
+                  >
+                    {m.fullName}
+                  </span>
+                ))}
               </div>
             </div>
             <Tabs defaultValue="iuran">
@@ -403,13 +456,15 @@ export default function LayananPage() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="iuran" className="mt-5">
-                <IuranTab iuran={data?.iuran ?? []} />
+                <IuranTab iuran={data.iuran} />
               </TabsContent>
               <TabsContent value="surat" className="mt-5">
                 <SuratTab
-                  nik={checkedNik}
-                  surat={data?.surat ?? []}
-                  onSubmitted={() => lookup(checkedNik)}
+                  key={data.kk.number}
+                  lookupKey={checkedKey}
+                  members={data.members}
+                  surat={data.surat}
+                  onSubmitted={() => lookup(checkedKey)}
                 />
               </TabsContent>
             </Tabs>

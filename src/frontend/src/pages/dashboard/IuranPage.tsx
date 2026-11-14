@@ -56,6 +56,8 @@ import {
   useAddIuran,
   useDeleteIuran,
   useListIuran,
+  useListKK,
+  useListWarga,
   useUpdateIuran,
 } from "../../hooks/useQueries";
 import { exportToCSV, parseCSV } from "../../utils/csvUtils";
@@ -108,6 +110,8 @@ function formatRupiah(n: number | bigint) {
 
 export default function IuranPage() {
   const { data: iuranList = [], isLoading } = useListIuran();
+  const { data: wargaList = [] } = useListWarga();
+  const { data: kkList = [] } = useListKK();
   const addMutation = useAddIuran();
   const updateMutation = useUpdateIuran();
   const deleteMutation = useDeleteIuran();
@@ -115,6 +119,7 @@ export default function IuranPage() {
 
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<Status__2 | "all">("all");
+  const [filterKK, setFilterKK] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editData, setEditData] = useState<IuranData | null>(null);
@@ -135,12 +140,20 @@ export default function IuranPage() {
     [iuranList],
   );
 
+  const kkByWarga = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const w of wargaList) m.set(w.id, w.kkNumber);
+    return m;
+  }, [wargaList]);
+
   const filtered = iuranList.filter((item) => {
-    const matchSearch = item.wargaName
-      .toLowerCase()
-      .includes(search.toLowerCase());
+    const q = search.toLowerCase();
+    const kkNo = kkByWarga.get(item.wargaId) ?? "";
+    const matchSearch =
+      item.wargaName.toLowerCase().includes(q) || kkNo.includes(search.trim());
     const matchStatus = filterStatus === "all" || item.status === filterStatus;
-    return matchSearch && matchStatus;
+    const matchKK = filterKK === "all" || kkNo === filterKK;
+    return matchSearch && matchStatus && matchKK;
   });
 
   const openAdd = () => {
@@ -352,13 +365,26 @@ export default function IuranPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Cari nama warga..."
+            placeholder="Cari nama warga atau nomor KK..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
             data-ocid="iuran.search_input"
           />
         </div>
+        <Select value={filterKK} onValueChange={setFilterKK}>
+          <SelectTrigger className="w-full sm:w-56" data-ocid="iuran.kk_select">
+            <SelectValue placeholder="Filter KK" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua KK</SelectItem>
+            {kkList.map((k) => (
+              <SelectItem key={k.id} value={k.number}>
+                {k.head} · {k.number.slice(-4)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select
           value={filterStatus}
           onValueChange={(v) => setFilterStatus(v as Status__2 | "all")}
@@ -379,7 +405,7 @@ export default function IuranPage() {
           <Table data-ocid="iuran.table">
             <TableHeader>
               <TableRow className="bg-muted/30">
-                <TableHead>Nama Warga</TableHead>
+                <TableHead>Nama Warga / KK</TableHead>
                 <TableHead>Jenis Iuran</TableHead>
                 <TableHead>Bulan/Tahun</TableHead>
                 <TableHead>Jumlah</TableHead>
@@ -408,6 +434,9 @@ export default function IuranPage() {
                     <TableRow key={item.id} data-ocid={`iuran.row.${i + 1}`}>
                       <TableCell className="font-medium">
                         {item.wargaName}
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          KK {kkByWarga.get(item.wargaId) || "-"}
+                        </span>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {typeLabels[item.iuranType]}
