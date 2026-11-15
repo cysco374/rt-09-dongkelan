@@ -82,7 +82,7 @@ export default function LoginPage() {
                 <Shield className="w-8 h-8 text-primary-foreground" />
               </div>
               <h1 className="font-bricolage font-bold text-2xl mb-1">
-                Login Admin
+                Login Pengurus
               </h1>
               <p className="text-primary-foreground/70 text-sm">
                 Panel Manajemen RT 09 Dongkelan

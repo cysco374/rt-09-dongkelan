@@ -36,6 +36,20 @@ const COLLECTIONS = [
 ] as const;
 type Collection = (typeof COLLECTIONS)[number];
 
+export const ROLES = ["ketua", "bendahara", "sekretaris"] as const;
+type Role = "admin" | (typeof ROLES)[number];
+// Hak tulis per koleksi. "admin" selalu diizinkan. Membaca terbuka untuk semua peran yang login.
+const WRITE_ROLES: Record<string, Role[]> = {
+  warga: ["ketua", "sekretaris"],
+  kk: ["ketua", "sekretaris"],
+  pengumuman: ["ketua", "sekretaris"],
+  surat: ["ketua", "sekretaris"],
+  fasilitas: ["ketua", "sekretaris"],
+  pengurus: ["ketua", "sekretaris"],
+  iuran: ["ketua", "bendahara"],
+};
+const USERNAME_RE = /^[a-z0-9._-]{3,30}$/;
+
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const STATS_TTL_MS = 60 * 1000;
 const BIGINT_KEYS = new Set(["createdAt", "month", "year", "total"]);
@@ -100,27 +114,37 @@ async function getSecret(store: Store): Promise<string> {
   }
   return rec.v as string;
 }
-async function signToken(store: Store, username: string): Promise<string> {
+type Session = { u: string; r: Role; n: string };
+async function signToken(store: Store, who: Session): Promise<string> {
   const body = Buffer.from(
-    JSON.stringify({ u: username, exp: Date.now() + TOKEN_TTL_MS }),
+    JSON.stringify({ ...who, exp: Date.now() + TOKEN_TTL_MS }),
   ).toString("base64url");
   const sig = createHmac("sha256", await getSecret(store))
     .update(body)
     .digest("base64url");
   return `${body}.${sig}`;
 }
-async function verifyToken(store: Store, token: string): Promise<boolean> {
+async function verifyToken(
+  store: Store,
+  token: string,
+): Promise<Session | null> {
   const [body, sig] = token.split(".");
-  if (!body || !sig) return false;
+  if (!body || !sig) return null;
   const expect = createHmac("sha256", await getSecret(store))
     .update(body)
     .digest("base64url");
-  if (!safeEq(sig, expect)) return false;
+  if (!safeEq(sig, expect)) return null;
   try {
-    const { exp } = JSON.parse(Buffer.from(body, "base64url").toString());
-    return typeof exp === "number" && exp > Date.now();
+    const t = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (typeof t.exp !== "number" || t.exp <= Date.now()) return null;
+    const r: Role = t.r ?? "admin"; // token lama (sebelum ada peran) = admin
+    if (r === "admin") return { u: t.u, r, n: t.n ?? t.u };
+    // akun non-admin: pastikan masih ada, aktif, dan perannya tidak berubah
+    const rec = await store.get(`user/${t.u}`, { type: "json" });
+    if (!rec || rec.disabled || rec.role !== r) return null;
+    return { u: rec.username, r: rec.role, n: rec.name };
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -196,8 +220,13 @@ async function computeStats(store: Store) {
 }
 
 // ---------- method table ----------
-type Ctx = { store: Store; env: Env; authed: boolean };
-type Method = { auth: boolean; fn: (c: Ctx, args: any[]) => Promise<any> };
+type Ctx = { store: Store; env: Env; authed: boolean; session: Session | null };
+type Method = {
+  auth: boolean;
+  /** Peran yang boleh (selain admin). Kosong [] = hanya admin. Tidak diisi = semua yang login. */
+  roles?: Role[];
+  fn: (c: Ctx, args: any[]) => Promise<any>;
+};
 const methods: Record<string, Method> = {};
 
 for (const c of COLLECTIONS) {
@@ -205,6 +234,7 @@ for (const c of COLLECTIONS) {
   const pub = c === "pengurus";
   methods[`add${Cap}`] = {
     auth: true,
+    roles: WRITE_ROLES[c],
     fn: async ({ store }, [data]) => {
       const id = newId(c);
       await store.setJSON(`${c}/${id}`, { ...data, id, createdAt: Date.now() });
@@ -222,6 +252,7 @@ for (const c of COLLECTIONS) {
   };
   methods[`update${Cap}`] = {
     auth: true,
+    roles: WRITE_ROLES[c],
     fn: async ({ store }, [data]) => {
       const key = `${c}/${str(data?.id, 100)}`;
       const old = await store.get(key, { type: "json" });
@@ -235,6 +266,7 @@ for (const c of COLLECTIONS) {
   };
   methods[`delete${Cap}`] = {
     auth: true,
+    roles: WRITE_ROLES[c],
     fn: async ({ store }, [id]) => {
       const key = `${c}/${str(id, 100)}`;
       if (!(await store.get(key, { type: "json" })))
@@ -277,6 +309,7 @@ methods.getWebsiteSettings = {
 };
 methods.setWebsiteSettings = {
   auth: true,
+  roles: ["ketua"],
   fn: async ({ store }, [s]) => {
     await store.setJSON("meta/settings", s);
   },
@@ -298,10 +331,12 @@ methods.getStatistics = {
 // admin account
 methods.getAdminUsername = {
   auth: true,
+  roles: [],
   fn: async ({ store, env }) => (await getAdmin(store, env))?.username ?? "",
 };
 methods.setAdminCredentials = {
   auth: true,
+  roles: [],
   fn: async ({ store, env }, [username, passwordHash, currentPasswordHash]) => {
     const admin = await getAdmin(store, env);
     if (!admin) return false;
@@ -548,6 +583,7 @@ const DEMO_FASILITAS = [
 
 methods.seedDemo = {
   auth: true,
+  roles: [],
   fn: async ({ store }) => {
     const exist = await Promise.all(
       (["warga", "kk", "iuran", "fasilitas"] as const).map((c) =>
@@ -710,6 +746,7 @@ const MORE_FASILITAS = [
 
 methods.seedDemoMore = {
   auth: true,
+  roles: [],
   fn: async ({ store }) => {
     const [kks, wargas, iurans, fass] = await Promise.all([
       listAll(store, "kk"),
@@ -837,10 +874,148 @@ methods.seedDemoMore = {
 methods.login = {
   auth: false,
   fn: async ({ store, env }, [username, passwordHash]) => {
-    if (!(await checkCredentials(store, env, username, passwordHash)))
+    const u = String(username ?? "").trim();
+    if (await checkCredentials(store, env, u, passwordHash)) {
+      const admin = await getAdmin(store, env);
+      return signToken(store, {
+        u: admin!.username,
+        r: "admin",
+        n: admin!.username,
+      });
+    }
+    const rec = USERNAME_RE.test(u.toLowerCase())
+      ? await store.get(`user/${u.toLowerCase()}`, { type: "json" })
+      : null;
+    // hitung hash tetap dilakukan agar waktu respons tidak membocorkan keberadaan akun
+    const ok = safeEq(
+      scryptHex(String(passwordHash), rec?.salt ?? "0".repeat(32)),
+      rec?.hash ?? "0".repeat(64),
+    );
+    if (!rec || rec.disabled || !ok)
       throw new HttpError(401, "Username atau password salah");
+    return signToken(store, { u: rec.username, r: rec.role, n: rec.name });
+  },
+};
+
+// ---------- akun pengurus (Ketua / Bendahara / Sekretaris) ----------
+const HASH_RE = /^[a-f0-9]{64}$/;
+const publicUser = (r: Json) => ({
+  username: r.username,
+  name: r.name,
+  role: r.role,
+  disabled: !!r.disabled,
+  createdAt: r.createdAt,
+});
+methods.whoami = {
+  auth: true,
+  fn: async ({ session }) => session,
+};
+methods.listUsers = {
+  auth: true,
+  roles: ["ketua"],
+  fn: async ({ store }) => {
+    const { blobs } = await store.list({ prefix: "user/" });
+    const recs = await Promise.all(
+      blobs.map((b: { key: string }) => store.get(b.key, { type: "json" })),
+    );
+    return recs
+      .filter(Boolean)
+      .map(publicUser)
+      .sort((a, b) => a.username.localeCompare(b.username));
+  },
+};
+methods.addUser = {
+  auth: true,
+  roles: ["ketua"],
+  fn: async ({ store, env }, [d]) => {
+    const username = str(d?.username, 30).trim().toLowerCase();
+    const name = str(d?.name, 80).trim();
+    if (!USERNAME_RE.test(username))
+      throw new HttpError(400, "Username 3–30 karakter: huruf kecil, angka, titik, - atau _");
+    if (!name) throw new HttpError(400, "Nama lengkap wajib diisi");
+    if (!(ROLES as readonly string[]).includes(d?.role))
+      throw new HttpError(400, "Peran tidak valid");
+    if (!HASH_RE.test(String(d?.passwordHash)))
+      throw new HttpError(400, "Password tidak valid");
     const admin = await getAdmin(store, env);
-    return signToken(store, admin!.username);
+    if (admin && admin.username.toLowerCase() === username)
+      throw new HttpError(409, "Username sudah dipakai");
+    const salt = randomBytes(16).toString("hex");
+    const r = await store.setJSON(
+      `user/${username}`,
+      {
+        username,
+        name,
+        role: d.role,
+        salt,
+        hash: scryptHex(String(d.passwordHash), salt),
+        disabled: false,
+        createdAt: Date.now(),
+      },
+      { onlyIfNew: true },
+    );
+    if (r && r.modified === false)
+      throw new HttpError(409, "Username sudah dipakai");
+    return username;
+  },
+};
+methods.updateUser = {
+  auth: true,
+  roles: ["ketua"],
+  fn: async ({ store }, [d]) => {
+    const key = `user/${str(d?.username, 30).toLowerCase()}`;
+    const rec = await store.get(key, { type: "json" });
+    if (!rec) throw new HttpError(404, "Akun tidak ditemukan");
+    if (d.role !== undefined && !(ROLES as readonly string[]).includes(d.role))
+      throw new HttpError(400, "Peran tidak valid");
+    const name = d.name === undefined ? rec.name : str(d.name, 80).trim();
+    if (!name) throw new HttpError(400, "Nama lengkap wajib diisi");
+    await store.setJSON(key, {
+      ...rec,
+      name,
+      role: d.role ?? rec.role,
+      disabled: d.disabled === undefined ? rec.disabled : !!d.disabled,
+    });
+  },
+};
+methods.resetUserPassword = {
+  auth: true,
+  roles: ["ketua"],
+  fn: async ({ store }, [username, passwordHash]) => {
+    const key = `user/${str(username, 30).toLowerCase()}`;
+    const rec = await store.get(key, { type: "json" });
+    if (!rec) throw new HttpError(404, "Akun tidak ditemukan");
+    if (!HASH_RE.test(String(passwordHash)))
+      throw new HttpError(400, "Password tidak valid");
+    const salt = randomBytes(16).toString("hex");
+    await store.setJSON(key, {
+      ...rec,
+      salt,
+      hash: scryptHex(String(passwordHash), salt),
+    });
+  },
+};
+methods.deleteUser = {
+  auth: true,
+  roles: ["ketua"],
+  fn: async ({ store }, [username]) => {
+    const key = `user/${str(username, 30).toLowerCase()}`;
+    if (!(await store.get(key, { type: "json" })))
+      throw new HttpError(404, "Akun tidak ditemukan");
+    await store.delete(key);
+  },
+};
+methods.changeMyPassword = {
+  auth: true,
+  fn: async ({ store, session }, [current, next]) => {
+    if (!session || session.r === "admin") return false; // admin: pakai setAdminCredentials
+    const key = `user/${session.u}`;
+    const rec = await store.get(key, { type: "json" });
+    if (!rec || !HASH_RE.test(String(next))) return false;
+    if (!safeEq(scryptHex(String(current), rec.salt), rec.hash)) return false;
+    const salt = randomBytes(16).toString("hex");
+    await store.setJSON(key, { ...rec, salt, hash: scryptHex(String(next), salt) });
+    return true;
   },
 };
 
@@ -874,12 +1049,20 @@ export async function handleRpc(
       /^Bearer /,
       "",
     );
-    const authed = bearer ? await verifyToken(store, bearer) : false;
-    if (m.auth && !authed)
+    const session = bearer ? await verifyToken(store, bearer) : null;
+    const authed = !!session;
+    if (m.auth && !session)
       throw new HttpError(401, "Sesi berakhir, silakan login ulang");
+    if (
+      m.roles &&
+      session &&
+      session.r !== "admin" &&
+      !m.roles.includes(session.r)
+    )
+      throw new HttpError(403, "Peran Anda tidak memiliki akses untuk aksi ini");
 
     const result = await m.fn(
-      { store, env, authed },
+      { store, env, authed, session },
       Array.isArray(args) ? args : [],
     );
     const body =

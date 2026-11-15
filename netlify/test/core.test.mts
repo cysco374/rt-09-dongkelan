@@ -267,4 +267,65 @@ assert.ok(fam.result.iuran.length >= 3);
 const slamet = w2.find((w: any) => w.fullName === "Slamet Riyadi");
 const viaNik = await call("portalLookup", [slamet.nik], "");
 assert.equal(viaNik.result.kk.number, "3402010101260001");
+// ---- peran: ketua / bendahara / sekretaris
+const adminTok = token;
+const mkUser = (username: string, role: string, pw: string) =>
+  call("addUser", [{ username, name: username.toUpperCase(), role, passwordHash: h(pw) }], adminTok);
+assert.equal((await mkUser("pak.ketua", "ketua", "k1")).status, 200);
+assert.equal((await mkUser("bu.bendahara", "bendahara", "b1")).status, 200);
+assert.equal((await mkUser("bu.sekretaris", "sekretaris", "s1")).status, 200);
+assert.equal((await mkUser("pak.ketua", "ketua", "x")).status, 409, "dup username");
+assert.equal((await mkUser("admin", "ketua", "x")).status, 409, "admin name reserved");
+assert.equal((await mkUser("hacker", "admin", "x")).status, 400, "cannot mint admin");
+const login = async (u: string, p: string) => call("login", [u, h(p)], "");
+const ket = (await login("pak.ketua", "k1")).result;
+const ben = (await login("bu.bendahara", "b1")).result;
+const sek = (await login("bu.sekretaris", "s1")).result;
+assert.ok(ket && ben && sek);
+assert.equal((await login("pak.ketua", "salah")).status, 401);
+assert.equal((await login("tidakada", "x")).status, 401);
+assert.equal((await call("whoami", [], ben)).result.r, "bendahara");
+
+const newWarga = { id: "", nik: "3402019999999999", fullName: "Uji Peran", dob: "1990-01-01", gender: "male", address: "x", phone: "0", status: "tetap", kkNumber: "", maritalStatus: "kawin", job: "x", createdAt: { __bi: "0" } };
+const newIuran = { id: "", wargaId: wid, wargaName: "Uji", iuranType: "monthly", month: { __bi: "1" }, year: { __bi: "2026" }, total: { __bi: "25000" }, status: "unpaid", createdAt: { __bi: "0" } };
+const newPeng = { id: "", title: "Uji", content: "isi", date: "2026-01-01", status: "active", createdAt: { __bi: "0" } };
+const newFas = { id: "", name: "Aset Uji", fasilitasType: "equipment", condition: "good", acquisitionYear: { __bi: "2024" }, location: "x", description: "x", createdAt: { __bi: "0" } };
+// bendahara: iuran ya; warga/pengumuman/aset tidak; baca ya
+assert.equal((await call("addIuran", [newIuran], ben)).status, 200);
+assert.equal((await call("addWarga", [newWarga], ben)).status, 403);
+assert.equal((await call("addPengumuman", [newPeng], ben)).status, 403);
+assert.equal((await call("addFasilitas", [newFas], ben)).status, 403);
+assert.equal((await call("listWarga", [], ben)).status, 200);
+assert.equal((await call("listIuran", [], ben)).status, 200);
+// sekretaris: warga/pengumuman/aset ya; iuran tidak
+assert.equal((await call("addWarga", [newWarga], sek)).status, 200);
+assert.equal((await call("addPengumuman", [newPeng], sek)).status, 200);
+assert.equal((await call("addFasilitas", [newFas], sek)).status, 200);
+assert.equal((await call("addIuran", [newIuran], sek)).status, 403);
+assert.equal((await call("deleteIuran", ["x"], sek)).status, 403);
+// ketua: semua; kelola akun; tapi bukan seed / kredensial admin
+assert.equal((await call("addIuran", [newIuran], ket)).status, 200);
+assert.equal((await call("addWarga", [{ ...newWarga, nik: "3402019999999998" }], ket)).status, 200);
+assert.equal((await call("listUsers", [], ket)).result.length, 3);
+assert.equal((await call("listUsers", [], ket)).result[0].hash, undefined, "hash not leaked");
+assert.equal((await call("listUsers", [], ben)).status, 403);
+assert.equal((await call("seedDemo", [], ket)).status, 403);
+assert.equal((await call("setAdminCredentials", ["a", h("b"), h("c")], ket)).status, 403);
+// ganti password sendiri
+assert.equal((await call("changeMyPassword", [h("salah"), h("baru1")], ben)).result, false);
+assert.equal((await call("changeMyPassword", [h("b1"), h("baru1")], ben)).result, true);
+assert.equal((await login("bu.bendahara", "b1")).status, 401);
+assert.ok((await login("bu.bendahara", "baru1")).result);
+// reset oleh ketua, nonaktifkan => token lama langsung ditolak
+assert.equal((await call("resetUserPassword", ["bu.sekretaris", h("reset1")], ket)).status, 200);
+assert.ok((await login("bu.sekretaris", "reset1")).result);
+assert.equal((await call("updateUser", [{ username: "bu.bendahara", disabled: true }], ket)).status, 200);
+assert.equal((await call("listWarga", [], ben)).status, 401, "disabled => token invalid");
+assert.equal((await login("bu.bendahara", "baru1")).status, 401);
+assert.equal((await call("updateUser", [{ username: "bu.bendahara", disabled: false, role: "sekretaris" }], ket)).status, 200);
+assert.equal((await call("addIuran", [newIuran], ben)).status, 401, "role changed => old token invalid");
+assert.equal((await call("deleteUser", ["bu.bendahara"], ket)).status, 200);
+// admin tetap punya akses penuh
+assert.equal((await call("addWarga", [{ ...newWarga, nik: "3402019999999997" }], adminTok)).status, 200);
+
 console.log("ALL OK");

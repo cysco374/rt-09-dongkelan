@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Lock, Save, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { api, getSession } from "../../api/client";
 import type { WebsiteSettings } from "../../backend.d";
 import {
   useSetAdminCredentials,
@@ -20,6 +21,80 @@ import {
   useWebsiteSettings,
 } from "../../hooks/useQueries";
 import { sha256 } from "../../utils/hash";
+
+function PasswordCard() {
+  const [f, setF] = useState({ cur: "", next: "", conf: "" });
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (f.next.length < 6)
+      return toast.error("Password baru minimal 6 karakter");
+    if (f.next !== f.conf)
+      return toast.error("Konfirmasi password tidak cocok");
+    setBusy(true);
+    try {
+      const ok = await api.changeMyPassword(
+        await sha256(f.cur),
+        await sha256(f.next),
+      );
+      if (ok) {
+        toast.success("Password berhasil diubah");
+        setF({ cur: "", next: "", conf: "" });
+      } else toast.error("Password saat ini salah");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Gagal mengubah password",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="shadow-card">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-bricolage flex items-center gap-2">
+          <Lock className="w-4 h-4 text-primary" />
+          Ganti Password
+        </CardTitle>
+        <CardDescription>Ubah password login akun Anda</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={submit} className="space-y-4 max-w-md">
+          {(
+            [
+              ["cur", "Password saat ini", "current-password"],
+              ["next", "Password baru", "new-password"],
+              ["conf", "Konfirmasi password baru", "new-password"],
+            ] as const
+          ).map(([k, label, ac]) => (
+            <div key={k}>
+              <Label>{label}</Label>
+              <Input
+                type="password"
+                value={f[k]}
+                onChange={(e) => setF({ ...f, [k]: e.target.value })}
+                autoComplete={ac}
+                className="mt-1"
+              />
+            </div>
+          ))}
+          <Button
+            type="submit"
+            disabled={busy}
+            data-ocid="pengaturan.password.save_button"
+          >
+            {busy ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Lock className="w-4 h-4 mr-2" />
+            )}
+            Ubah Password
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
 
 const defaultSettings: WebsiteSettings = {
   name: "RT 09 Dongkelan",
@@ -118,6 +193,21 @@ export default function PengaturanPage() {
       toast.error("Gagal mengubah kredensial");
     }
   };
+
+  const role = getSession()?.r;
+  if (role === "bendahara" || role === "sekretaris") {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h1 className="font-bricolage font-bold text-xl flex items-center gap-2">
+            <Settings className="w-5 h-5 text-primary" />
+            Pengaturan Akun
+          </h1>
+        </div>
+        <PasswordCard />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -271,115 +361,121 @@ export default function PengaturanPage() {
         </CardContent>
       </Card>
 
-      {/* Keamanan Akun */}
-      <Card className="shadow-card">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-bricolage flex items-center gap-2">
-            <Lock className="w-4 h-4 text-primary" />
-            Keamanan Akun
-          </CardTitle>
-          <CardDescription>
-            Ubah username dan password login admin
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleChangeCredentials} className="space-y-4">
-            <div>
-              <Label htmlFor="cred-current">Password Saat Ini</Label>
-              <Input
-                id="cred-current"
-                type="password"
-                value={credForm.currentPassword}
-                onChange={(e) => {
-                  setCredForm((prev) => ({
-                    ...prev,
-                    currentPassword: e.target.value,
-                  }));
-                  setCredError(null);
-                }}
-                placeholder="Masukkan password saat ini"
-                className="mt-1"
-                autoComplete="current-password"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-username">Username Baru</Label>
-              <Input
-                id="cred-username"
-                type="text"
-                value={credForm.username}
-                onChange={(e) => {
-                  setCredForm((prev) => ({
-                    ...prev,
-                    username: e.target.value,
-                  }));
-                  setCredError(null);
-                }}
-                placeholder="Masukkan username baru"
-                className="mt-1"
-                autoComplete="username"
-                data-ocid="pengaturan.input"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-password">Password Baru</Label>
-              <Input
-                id="cred-password"
-                type="password"
-                value={credForm.password}
-                onChange={(e) => {
-                  setCredForm((prev) => ({
-                    ...prev,
-                    password: e.target.value,
-                  }));
-                  setCredError(null);
-                }}
-                placeholder="Masukkan password baru"
-                className="mt-1"
-                autoComplete="new-password"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-confirm">Konfirmasi Password</Label>
-              <Input
-                id="cred-confirm"
-                type="password"
-                value={credForm.confirmPassword}
-                onChange={(e) => {
-                  setCredForm((prev) => ({
-                    ...prev,
-                    confirmPassword: e.target.value,
-                  }));
-                  setCredError(null);
-                }}
-                placeholder="Ulangi password baru"
-                className="mt-1"
-                autoComplete="new-password"
-              />
-            </div>
+      {role === "admin" ? (
+        <>
+          {/* Keamanan Akun */}
+          <Card className="shadow-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-bricolage flex items-center gap-2">
+                <Lock className="w-4 h-4 text-primary" />
+                Keamanan Akun
+              </CardTitle>
+              <CardDescription>
+                Ubah username dan password login admin
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleChangeCredentials} className="space-y-4">
+                <div>
+                  <Label htmlFor="cred-current">Password Saat Ini</Label>
+                  <Input
+                    id="cred-current"
+                    type="password"
+                    value={credForm.currentPassword}
+                    onChange={(e) => {
+                      setCredForm((prev) => ({
+                        ...prev,
+                        currentPassword: e.target.value,
+                      }));
+                      setCredError(null);
+                    }}
+                    placeholder="Masukkan password saat ini"
+                    className="mt-1"
+                    autoComplete="current-password"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cred-username">Username Baru</Label>
+                  <Input
+                    id="cred-username"
+                    type="text"
+                    value={credForm.username}
+                    onChange={(e) => {
+                      setCredForm((prev) => ({
+                        ...prev,
+                        username: e.target.value,
+                      }));
+                      setCredError(null);
+                    }}
+                    placeholder="Masukkan username baru"
+                    className="mt-1"
+                    autoComplete="username"
+                    data-ocid="pengaturan.input"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cred-password">Password Baru</Label>
+                  <Input
+                    id="cred-password"
+                    type="password"
+                    value={credForm.password}
+                    onChange={(e) => {
+                      setCredForm((prev) => ({
+                        ...prev,
+                        password: e.target.value,
+                      }));
+                      setCredError(null);
+                    }}
+                    placeholder="Masukkan password baru"
+                    className="mt-1"
+                    autoComplete="new-password"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cred-confirm">Konfirmasi Password</Label>
+                  <Input
+                    id="cred-confirm"
+                    type="password"
+                    value={credForm.confirmPassword}
+                    onChange={(e) => {
+                      setCredForm((prev) => ({
+                        ...prev,
+                        confirmPassword: e.target.value,
+                      }));
+                      setCredError(null);
+                    }}
+                    placeholder="Ulangi password baru"
+                    className="mt-1"
+                    autoComplete="new-password"
+                  />
+                </div>
 
-            {credError && (
-              <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
-                {credError}
-              </p>
-            )}
+                {credError && (
+                  <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                    {credError}
+                  </p>
+                )}
 
-            <Button
-              type="submit"
-              disabled={setCredentialsMutation.isPending}
-              className="bg-primary text-primary-foreground"
-              data-ocid="pengaturan.kredensial.save_button"
-            >
-              {setCredentialsMutation.isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Lock className="w-4 h-4 mr-2" />
-              )}
-              Ubah Kredensial
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+                <Button
+                  type="submit"
+                  disabled={setCredentialsMutation.isPending}
+                  className="bg-primary text-primary-foreground"
+                  data-ocid="pengaturan.kredensial.save_button"
+                >
+                  {setCredentialsMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Lock className="w-4 h-4 mr-2" />
+                  )}
+                  Ubah Kredensial
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        <PasswordCard />
+      )}
 
       {/* Save Button Bottom */}
       <div className="flex justify-end pb-4">

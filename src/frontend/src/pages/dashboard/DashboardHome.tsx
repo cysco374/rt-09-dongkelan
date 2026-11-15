@@ -24,7 +24,7 @@ import {
 import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { api } from "../../api/client";
+import { api, getSession } from "../../api/client";
 import { Category, Status__1, Status__2 } from "../../backend.d";
 import {
   useListIuran,
@@ -159,7 +159,7 @@ export default function DashboardHome() {
 
   return (
     <div className="space-y-6">
-      {isEmpty && (
+      {isEmpty && getSession()?.r === "admin" && (
         <div
           className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between rounded-2xl border border-dashed border-primary/40 bg-primary/5 p-4"
           data-ocid="dashboard.seed.card"
@@ -182,7 +182,7 @@ export default function DashboardHome() {
         </div>
       )}
 
-      {!isEmpty && !!stats && (
+      {!isEmpty && !!stats && getSession()?.r === "admin" && (
         <div className="flex justify-end">
           <Button
             variant="outline"

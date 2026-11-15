@@ -19,6 +19,7 @@ import IuranPage from "./pages/dashboard/IuranPage";
 import KKPage from "./pages/dashboard/KKPage";
 import LaporanPage from "./pages/dashboard/LaporanPage";
 import PengaturanPage from "./pages/dashboard/PengaturanPage";
+import PenggunaPage from "./pages/dashboard/PenggunaPage";
 import PengumumanPage from "./pages/dashboard/PengumumanPage";
 import PengurusPage from "./pages/dashboard/PengurusPage";
 import SuratPage from "./pages/dashboard/SuratPage";
@@ -137,6 +138,12 @@ const dashboardPengaturanRoute = createRoute({
   component: PengaturanPage,
 });
 
+const dashboardPenggunaRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/dashboard/pengguna",
+  component: PenggunaPage,
+});
+
 const routeTree = rootRoute.addChildren([
   publicLayoutRoute.addChildren([
     homeRoute,
@@ -155,6 +162,7 @@ const routeTree = rootRoute.addChildren([
     dashboardPengurusRoute,
     dashboardPengaturanRoute,
     dashboardLaporanRoute,
+    dashboardPenggunaRoute,
   ]),
 ]);
 

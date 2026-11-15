@@ -18,6 +18,55 @@ export function setToken(token: string | null) {
   }
 }
 
+export type Role = "admin" | "ketua" | "bendahara" | "sekretaris";
+export interface Session {
+  u: string;
+  r: Role;
+  n: string;
+}
+export const roleLabel: Record<Role, string> = {
+  admin: "Administrator",
+  ketua: "Ketua RT",
+  bendahara: "Bendahara",
+  sekretaris: "Sekretaris",
+};
+/** Peran dibaca dari token (hanya untuk menyesuaikan tampilan; server tetap memeriksa hak akses). */
+export function getSession(): Session | null {
+  const t = getToken();
+  if (!t) return null;
+  try {
+    const b = t.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
+    const j = JSON.parse(decodeURIComponent(escape(atob(b))));
+    return { u: j.u, r: j.r ?? "admin", n: j.n ?? j.u };
+  } catch {
+    return null;
+  }
+}
+/** Menu/halaman dashboard yang boleh dibuka tiap peran. */
+const AREAS: Record<string, Role[]> = {
+  "/dashboard": ["admin", "ketua", "bendahara", "sekretaris"],
+  "/dashboard/warga": ["admin", "ketua", "sekretaris"],
+  "/dashboard/kk": ["admin", "ketua", "sekretaris"],
+  "/dashboard/pengumuman": ["admin", "ketua", "sekretaris"],
+  "/dashboard/iuran": ["admin", "ketua", "bendahara"],
+  "/dashboard/laporan": ["admin", "ketua", "bendahara", "sekretaris"],
+  "/dashboard/surat": ["admin", "ketua", "sekretaris"],
+  "/dashboard/fasilitas": ["admin", "ketua", "sekretaris"],
+  "/dashboard/pengurus": ["admin", "ketua", "sekretaris"],
+  "/dashboard/pengguna": ["admin", "ketua"],
+  "/dashboard/pengaturan": ["admin", "ketua", "bendahara", "sekretaris"],
+};
+export const canOpen = (role: Role | undefined, path: string) =>
+  !!role && (AREAS[path]?.includes(role) ?? false);
+
+export interface AppUser {
+  username: string;
+  name: string;
+  role: Exclude<Role, "admin">;
+  disabled: boolean;
+  createdAt: number;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -71,6 +120,23 @@ export interface PortalLookup {
 
 export interface ApiActor extends backendInterface {
   login(username: string, passwordHash: string): Promise<string>;
+  whoami(): Promise<Session>;
+  listUsers(): Promise<AppUser[]>;
+  addUser(d: {
+    username: string;
+    name: string;
+    role: AppUser["role"];
+    passwordHash: string;
+  }): Promise<string>;
+  updateUser(d: {
+    username: string;
+    name?: string;
+    role?: AppUser["role"];
+    disabled?: boolean;
+  }): Promise<void>;
+  resetUserPassword(username: string, passwordHash: string): Promise<void>;
+  deleteUser(username: string): Promise<void>;
+  changeMyPassword(current: string, next: string): Promise<boolean>;
   portalLookup(key: string): Promise<PortalLookup | null>;
   seedDemo(): Promise<{ kk: number; warga: number; fasilitas: number }>;
   seedDemoMore(): Promise<{
@@ -141,6 +207,13 @@ const names = [
   "portalSubmitSurat",
   "seedDemo",
   "seedDemoMore",
+  "whoami",
+  "listUsers",
+  "addUser",
+  "updateUser",
+  "resetUserPassword",
+  "deleteUser",
+  "changeMyPassword",
 ] as const;
 
 export const api = Object.fromEntries(

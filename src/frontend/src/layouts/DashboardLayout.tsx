@@ -13,6 +13,7 @@ import {
   Megaphone,
   Menu,
   Settings,
+  ShieldCheck,
   UserCog,
   Users,
   Wallet,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
+import { canOpen, getSession, roleLabel } from "../api/client";
 import { logout as adminLogout, isLoggedIn } from "../hooks/useAdminAuth";
 
 const sidebarItems = [
@@ -78,6 +80,12 @@ const sidebarItems = [
     ocid: "dashboard.nav_link.pengurus",
   },
   {
+    label: "Akun Pengurus",
+    to: "/dashboard/pengguna",
+    icon: ShieldCheck,
+    ocid: "dashboard.nav_link.pengguna",
+  },
+  {
     label: "Pengaturan",
     to: "/dashboard/pengaturan",
     icon: Settings,
@@ -105,8 +113,29 @@ export default function DashboardLayout({
     navigate({ to: "/login" });
   };
 
+  const session = getSession();
+
+  // Halaman di luar hak peran dialihkan ke Dashboard
+  useEffect(() => {
+    if (
+      session &&
+      location.pathname.startsWith("/dashboard") &&
+      !canOpen(session.r, location.pathname.replace(/\/$/, ""))
+    ) {
+      navigate({ to: "/dashboard" });
+    }
+  }, [session, location.pathname, navigate]);
+
   // Never render admin content without a session (prevents a flash before redirect)
-  if (!isLoggedIn()) return null;
+  if (!isLoggedIn() || !session) return null;
+
+  const visibleItems = sidebarItems.filter((i) => canOpen(session.r, i.to));
+  const initials = session.n
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   const currentItem = sidebarItems.find(
     (item) => location.pathname === item.to,
@@ -153,7 +182,7 @@ export default function DashboardLayout({
 
         {/* Sidebar Nav */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {sidebarItems.map((item) => {
+          {visibleItems.map((item) => {
             const isActive = location.pathname === item.to;
             return (
               <Link
@@ -232,7 +261,7 @@ export default function DashboardLayout({
               </div>
 
               <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-                {sidebarItems.map((item) => {
+                {visibleItems.map((item) => {
                   const isActive = location.pathname === item.to;
                   return (
                     <Link
@@ -289,7 +318,7 @@ export default function DashboardLayout({
                 {currentItem?.label || "Dashboard"}
               </h1>
               <p className="text-xs text-muted-foreground hidden sm:block">
-                RT 09 Dongkelan — Panel Admin
+                RT 09 Dongkelan — Panel Pengurus
               </p>
             </div>
           </div>
@@ -297,12 +326,16 @@ export default function DashboardLayout({
           {/* Admin Info */}
           <div className="flex items-center gap-3">
             <div className="hidden sm:block text-right">
-              <div className="text-sm font-medium text-foreground">Admin</div>
-              <div className="text-xs text-muted-foreground">Administrator</div>
+              <div className="text-sm font-medium text-foreground">
+                {session.n}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {roleLabel[session.r]}
+              </div>
             </div>
             <Avatar className="w-9 h-9">
               <AvatarFallback className="bg-primary text-primary-foreground font-bricolage text-sm">
-                AD
+                {initials}
               </AvatarFallback>
             </Avatar>
             <Button
@@ -330,7 +363,7 @@ export default function DashboardLayout({
 
         {/* Dashboard Footer */}
         <footer className="border-t border-border px-6 py-3 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()} RT 09 Dongkelan — Panel Admin
+          © {new Date().getFullYear()} RT 09 Dongkelan — Panel Pengurus
         </footer>
       </div>
     </div>
