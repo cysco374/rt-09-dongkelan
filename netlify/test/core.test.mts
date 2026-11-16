@@ -328,4 +328,29 @@ assert.equal((await call("deleteUser", ["bu.bendahara"], ket)).status, 200);
 // admin tetap punya akses penuh
 assert.equal((await call("addWarga", [{ ...newWarga, nik: "3402019999999997" }], adminTok)).status, 200);
 
+
+await mkUser("bendahara2", "bendahara", "b2");
+const ben2 = (await login("bendahara2", "b2")).result;
+// ---- kritik & saran
+const fb = (n: string, ph: string, m: string) => call("submitFeedback", [n, ph, m], "");
+assert.equal((await fb("A", "0812345678", "Pelayanan sudah bagus")).status, 400, "name too short");
+assert.equal((await fb("Ani", "abc", "Pelayanan sudah bagus")).status, 400, "bad phone");
+assert.equal((await fb("Ani", "0812345678", "ok")).status, 400, "msg too short");
+assert.equal((await fb("Ani", "0812-3456-78", "Tolong perbaiki lampu jalan gang 2")).status, 200);
+assert.equal((await fb("Ani", "081234567 8", "Tolong perbaiki lampu jalan gang 2")).status, 409, "duplicate");
+for (let k = 0; k < 4; k++) await fb("Ani", "08123456 78", `Masukan nomor ${k} dari Ani`);
+assert.equal((await fb("Ani", "0812345678", "Masukan keenam dari Ani")).status, 429, "daily cap");
+const pubList = (await call("listFeedbackPublic", [], "")).result;
+assert.equal(pubList.length, 5);
+assert.equal(pubList[0].phone, undefined, "phone never public");
+assert.equal(pubList[0].name, "Ani");
+assert.equal((await call("listFeedback", [], "")).status, 401, "full list is private");
+const full = await call("listFeedback", [], ket);
+assert.equal(full.status, 200);
+assert.equal(full.result[0].phone, "0812345678");
+assert.equal((await call("addFeedback", [{}], adminTok)).status, 404, "no admin-side add");
+const fid = pubList[0].id;
+assert.equal((await call("deleteFeedback", [fid], ben2)).status, 403, "bendahara cannot delete");
+assert.equal((await call("deleteFeedback", [fid], ket)).status, 200);
+assert.equal((await call("listFeedbackPublic", [], "")).result.length, 4);
 console.log("ALL OK");

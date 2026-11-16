@@ -1,6 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "@tanstack/react-router";
-import { Bell, ConciergeBell, Home, LogIn, Menu, X } from "lucide-react";
+import {
+  Bell,
+  ConciergeBell,
+  Home,
+  LogIn,
+  Menu,
+  MessageSquareText,
+  X,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 
@@ -17,6 +25,12 @@ const navItems = [
     to: "/layanan",
     icon: ConciergeBell,
     ocid: "nav.layanan_link",
+  },
+  {
+    label: "Kritik & Saran",
+    to: "/kritik-saran",
+    icon: MessageSquareText,
+    ocid: "nav.kritik_link",
   },
 ];
 

@@ -53,11 +53,22 @@ const AREAS: Record<string, Role[]> = {
   "/dashboard/surat": ["admin", "ketua", "sekretaris"],
   "/dashboard/fasilitas": ["admin", "ketua", "sekretaris"],
   "/dashboard/pengurus": ["admin", "ketua", "sekretaris"],
+  "/dashboard/kritik-saran": ["admin", "ketua", "bendahara", "sekretaris"],
   "/dashboard/pengguna": ["admin", "ketua"],
   "/dashboard/pengaturan": ["admin", "ketua", "bendahara", "sekretaris"],
 };
 export const canOpen = (role: Role | undefined, path: string) =>
   !!role && (AREAS[path]?.includes(role) ?? false);
+
+export interface FeedbackPublic {
+  id: string;
+  name: string;
+  message: string;
+  createdAt: bigint;
+}
+export interface FeedbackFull extends FeedbackPublic {
+  phone: string;
+}
 
 export interface AppUser {
   username: string;
@@ -121,6 +132,10 @@ export interface PortalLookup {
 export interface ApiActor extends backendInterface {
   login(username: string, passwordHash: string): Promise<string>;
   whoami(): Promise<Session>;
+  submitFeedback(name: string, phone: string, message: string): Promise<string>;
+  listFeedbackPublic(): Promise<FeedbackPublic[]>;
+  listFeedback(): Promise<FeedbackFull[]>;
+  deleteFeedback(id: string): Promise<void>;
   listUsers(): Promise<AppUser[]>;
   addUser(d: {
     username: string;
@@ -208,6 +223,10 @@ const names = [
   "seedDemo",
   "seedDemoMore",
   "whoami",
+  "submitFeedback",
+  "listFeedbackPublic",
+  "listFeedback",
+  "deleteFeedback",
   "listUsers",
   "addUser",
   "updateUser",

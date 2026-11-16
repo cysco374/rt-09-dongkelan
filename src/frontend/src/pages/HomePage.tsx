@@ -10,6 +10,7 @@ import {
   Mail,
   MapPin,
   Megaphone,
+  MessageSquareText,
   Phone,
   Users,
   Wallet,
@@ -350,12 +351,12 @@ export default function HomePage() {
 
       {/* Quick services */}
       <section className="container max-w-6xl mx-auto px-4 pt-16">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             {
               icon: Wallet,
               title: "Cek Iuran",
-              text: "Lihat riwayat dan tunggakan iuran dengan NIK Anda.",
+              text: "Lihat riwayat dan tunggakan iuran dengan Nomor KK Anda.",
             },
             {
               icon: FileText,
@@ -367,6 +368,11 @@ export default function HomePage() {
               title: "Info Terkini",
               text: "Pengumuman kerja bakti, ronda, dan kegiatan kampung.",
             },
+            {
+              icon: MessageSquareText,
+              title: "Kritik & Saran",
+              text: "Sampaikan masukan untuk RT 09 tanpa perlu login.",
+            },
           ].map((f, i) => (
             <motion.div
               key={f.title}
@@ -376,7 +382,13 @@ export default function HomePage() {
               transition={{ delay: i * 0.1 }}
             >
               <Link
-                to={f.title === "Info Terkini" ? "/pengumuman" : "/layanan"}
+                to={
+                  f.title === "Info Terkini"
+                    ? "/pengumuman"
+                    : f.title === "Kritik & Saran"
+                      ? "/kritik-saran"
+                      : "/layanan"
+                }
                 className="group block h-full bg-card border border-border rounded-2xl p-6 shadow-card card-lift"
                 data-ocid={`home.service.${i + 1}`}
               >

@@ -10,6 +10,7 @@ import {
 import DashboardLayout from "./layouts/DashboardLayout";
 import PublicLayout from "./layouts/PublicLayout";
 import HomePage from "./pages/HomePage";
+import KritikSaranPage from "./pages/KritikSaranPage";
 import LayananPage from "./pages/LayananPage";
 import LoginPage from "./pages/LoginPage";
 import PengumumanPublicPage from "./pages/PengumumanPublicPage";
@@ -17,6 +18,7 @@ import DashboardHome from "./pages/dashboard/DashboardHome";
 import FasilitasPage from "./pages/dashboard/FasilitasPage";
 import IuranPage from "./pages/dashboard/IuranPage";
 import KKPage from "./pages/dashboard/KKPage";
+import KritikSaranAdminPage from "./pages/dashboard/KritikSaranAdminPage";
 import LaporanPage from "./pages/dashboard/LaporanPage";
 import PengaturanPage from "./pages/dashboard/PengaturanPage";
 import PenggunaPage from "./pages/dashboard/PenggunaPage";
@@ -58,6 +60,18 @@ const layananRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/layanan",
   component: LayananPage,
+});
+
+const kritikSaranRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/kritik-saran",
+  component: KritikSaranPage,
+});
+
+const dashboardKritikRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/dashboard/kritik-saran",
+  component: KritikSaranAdminPage,
 });
 
 const loginRoute = createRoute({
@@ -149,6 +163,7 @@ const routeTree = rootRoute.addChildren([
     homeRoute,
     pengumumanPublicRoute,
     layananRoute,
+    kritikSaranRoute,
     loginRoute,
   ]),
   dashboardLayoutRoute.addChildren([
@@ -163,6 +178,7 @@ const routeTree = rootRoute.addChildren([
     dashboardPengaturanRoute,
     dashboardLaporanRoute,
     dashboardPenggunaRoute,
+    dashboardKritikRoute,
   ]),
 ]);
 

@@ -12,6 +12,7 @@ import {
   LogOut,
   Megaphone,
   Menu,
+  MessageSquareText,
   Settings,
   ShieldCheck,
   UserCog,
@@ -78,6 +79,12 @@ const sidebarItems = [
     to: "/dashboard/pengurus",
     icon: UserCog,
     ocid: "dashboard.nav_link.pengurus",
+  },
+  {
+    label: "Kritik & Saran",
+    to: "/dashboard/kritik-saran",
+    icon: MessageSquareText,
+    ocid: "dashboard.nav_link.kritik",
   },
   {
     label: "Akun Pengurus",

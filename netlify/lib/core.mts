@@ -33,6 +33,7 @@ const COLLECTIONS = [
   "surat",
   "fasilitas",
   "pengurus",
+  "feedback",
 ] as const;
 type Collection = (typeof COLLECTIONS)[number];
 
@@ -47,6 +48,7 @@ const WRITE_ROLES: Record<string, Role[]> = {
   fasilitas: ["ketua", "sekretaris"],
   pengurus: ["ketua", "sekretaris"],
   iuran: ["ketua", "bendahara"],
+  feedback: ["ketua", "sekretaris"], // moderasi (hapus)
 };
 const USERNAME_RE = /^[a-z0-9._-]{3,30}$/;
 
@@ -275,6 +277,56 @@ for (const c of COLLECTIONS) {
     },
   };
 }
+
+// ---------- kritik & saran ----------
+// Hanya hapus & daftar lengkap (dengan nomor HP) yang tersedia untuk pengurus.
+delete methods.addFeedback;
+delete methods.updateFeedback;
+delete methods.getFeedback;
+const PHONE_RE = /^\+?\d{8,15}$/;
+methods.submitFeedback = {
+  auth: false,
+  fn: async ({ store }, [name, phone, message]) => {
+    const n = str(name, 60).replace(/\s+/g, " ").trim();
+    const ph = str(phone, 25).replace(/[\s().-]/g, "");
+    const msg = str(message, 1000).trim();
+    if (n.length < 2) throw new HttpError(400, "Nama wajib diisi");
+    if (!PHONE_RE.test(ph))
+      throw new HttpError(400, "Nomor HP/WhatsApp tidak valid (8–15 digit)");
+    if (msg.length < 5)
+      throw new HttpError(400, "Isi kritik/saran terlalu pendek");
+    const all = await listAll(store, "feedback");
+    const dayAgo = Date.now() - 24 * 3600 * 1000;
+    const recent = all.filter((f) => f.phone === ph && f.createdAt > dayAgo);
+    if (recent.length >= 5)
+      throw new HttpError(429, "Batas pengiriman harian tercapai. Coba lagi besok.");
+    if (recent.some((f) => f.message === msg))
+      throw new HttpError(409, "Masukan yang sama sudah terkirim");
+    const id = newId("feedback");
+    await store.setJSON(`feedback/${id}`, {
+      id,
+      name: n,
+      phone: ph,
+      message: msg,
+      createdAt: Date.now(),
+    });
+    return id;
+  },
+};
+// Publik: tanpa nomor HP
+methods.listFeedbackPublic = {
+  auth: false,
+  fn: async ({ store }) =>
+    (await listAll(store, "feedback"))
+      .reverse()
+      .slice(0, 200)
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        message: f.message,
+        createdAt: f.createdAt,
+      })),
+};
 
 const filterBy =
   (c: Collection, field: string) =>
