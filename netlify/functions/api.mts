@@ -7,6 +7,9 @@ export default async (req: Request) => {
   return handleRpc(req, store as never, {
     adminUsername: Netlify.env.get("ADMIN_USERNAME"),
     adminPassword: Netlify.env.get("ADMIN_PASSWORD"),
+    cloudinaryCloud: Netlify.env.get("CLOUDINARY_CLOUD_NAME"),
+    cloudinaryKey: Netlify.env.get("CLOUDINARY_API_KEY"),
+    cloudinarySecret: Netlify.env.get("CLOUDINARY_API_SECRET"),
   });
 };
 

@@ -21,6 +21,9 @@ export interface Store {
 export interface Env {
   adminUsername?: string;
   adminPassword?: string;
+  cloudinaryCloud?: string;
+  cloudinaryKey?: string;
+  cloudinarySecret?: string;
 }
 
 type Json = Record<string, any>;
@@ -334,38 +337,70 @@ methods.listFeedbackPublic = {
 };
 
 // ---------- galeri kegiatan ----------
-// Foto disimpan terpisah (galeri-img/<id>) dan disajikan oleh function `img`.
+// Foto disimpan di Cloudinary (diunggah langsung dari browser dengan tanda tangan dari server).
+// Kunci API hanya ada di environment Netlify: CLOUDINARY_CLOUD_NAME / _API_KEY / _API_SECRET.
 delete methods.addGaleri;
 delete methods.updateGaleri;
 delete methods.getGaleri;
-const MAX_IMG_BYTES = 600 * 1024;
-const IMG_TYPES: Record<string, (b: Buffer) => boolean> = {
-  "image/jpeg": (b) => b[0] === 0xff && b[1] === 0xd8,
-  "image/png": (b) => b.subarray(1, 4).toString() === "PNG",
-  "image/webp": (b) =>
-    b.subarray(0, 4).toString() === "RIFF" &&
-    b.subarray(8, 12).toString() === "WEBP",
-};
-function parseImage(dataUrl: unknown) {
-  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(
-    String(dataUrl ?? ""),
-  );
-  if (!m) throw new HttpError(400, "Foto harus berformat JPG, PNG, atau WebP");
-  const buf = Buffer.from(m[2], "base64");
-  if (buf.length > MAX_IMG_BYTES)
+const CLD_FOLDER = "rt09-galeri";
+const GALERI_ID_RE = /^galeri_\d+_[a-f0-9]{6}$/;
+const PUBLIC_ID_RE = /^rt09-galeri\/[A-Za-z0-9_-]{6,40}$/;
+const sha1 = (v: string) => createHash("sha1").update(v).digest("hex");
+function cloudinary(env: Env) {
+  if (!env.cloudinaryCloud || !env.cloudinaryKey || !env.cloudinarySecret)
     throw new HttpError(
-      413,
-      "Ukuran foto terlalu besar (maks 600 KB setelah dikompres)",
+      503,
+      "Penyimpanan foto (Cloudinary) belum dikonfigurasi",
     );
-  if (!IMG_TYPES[m[1]](buf))
-    throw new HttpError(400, "Berkas foto tidak valid");
-  return { ct: m[1], b64: m[2] };
+  return {
+    cloud: env.cloudinaryCloud,
+    key: env.cloudinaryKey,
+    sign: (params: Record<string, string | number>) =>
+      sha1(
+        Object.keys(params)
+          .sort()
+          .map((k) => `${k}=${params[k]}`)
+          .join("&") + env.cloudinarySecret,
+      ),
+  };
 }
-export const GALERI_ID_RE = /^galeri_\d+_[a-f0-9]{6}$/;
+async function destroyCloudinary(env: Env, publicId: string) {
+  try {
+    const c = cloudinary(env);
+    const timestamp = Math.floor(Date.now() / 1000);
+    const body = new URLSearchParams({
+      public_id: publicId,
+      timestamp: String(timestamp),
+      api_key: c.key,
+      signature: c.sign({ public_id: publicId, timestamp }),
+    });
+    await fetch(`https://api.cloudinary.com/v1_1/${c.cloud}/image/destroy`, {
+      method: "POST",
+      body,
+    });
+  } catch (e) {
+    console.error("cloudinary destroy gagal", e); // jangan menggagalkan penghapusan data
+  }
+}
+methods.galeriUploadSign = {
+  auth: true,
+  roles: WRITE_ROLES.galeri,
+  fn: async ({ env }) => {
+    const c = cloudinary(env);
+    const timestamp = Math.floor(Date.now() / 1000);
+    return {
+      cloudName: c.cloud,
+      apiKey: c.key,
+      timestamp,
+      folder: CLD_FOLDER,
+      signature: c.sign({ folder: CLD_FOLDER, timestamp }),
+    };
+  },
+};
 methods.saveGaleri = {
   auth: true,
   roles: WRITE_ROLES.galeri,
-  fn: async ({ store }, [d, image]) => {
+  fn: async ({ store, env }, [d, image]) => {
     const title = str(d?.title, 100).trim();
     const description = str(d?.description, 500).trim();
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(d?.date)) ? d.date : "";
@@ -383,34 +418,49 @@ methods.saveGaleri = {
       if (!old) throw new HttpError(404, "Data tidak ditemukan");
     } else {
       if (!image) throw new HttpError(400, "Foto wajib dipilih");
-      if ((await listAll(store, "galeri")).length >= 100)
+      if ((await listAll(store, "galeri")).length >= 500)
         throw new HttpError(
           409,
-          "Galeri penuh (maks 100 foto). Hapus yang lama dulu.",
+          "Galeri penuh (maks 500 foto). Hapus yang lama dulu.",
         );
       id = newId("galeri");
     }
-    let version = old?.imageVersion ?? 0;
+    let imageUrl: string = old?.imageUrl ?? "";
+    let publicId: string = old?.publicId ?? "";
     if (image) {
-      await store.setJSON(`galeri-img/${id}`, parseImage(image));
-      version = Date.now();
+      const c = cloudinary(env);
+      const pid = String(image.publicId ?? "");
+      const url = String(image.imageUrl ?? "");
+      const urlRe = new RegExp(
+        `^https://res\\.cloudinary\\.com/${c.cloud.replace(/[^\w-]/g, "")}/image/upload/v\\d+/${pid.replace("/", "\\/")}\\.[a-z0-9]{3,5}$`,
+      );
+      if (!PUBLIC_ID_RE.test(pid) || !urlRe.test(url))
+        throw new HttpError(400, "Data foto tidak valid");
+      imageUrl = url;
+      publicId = pid;
     }
     await store.setJSON(`galeri/${id}`, {
       id,
       title,
       description,
       date,
-      imageVersion: version,
+      imageUrl,
+      publicId,
       createdAt: old?.createdAt ?? Date.now(),
     });
+    if (old && image && old.publicId && old.publicId !== publicId)
+      await destroyCloudinary(env, old.publicId);
     return id;
   },
 };
 {
   const generic = methods.deleteGaleri.fn;
   methods.deleteGaleri.fn = async (c, args) => {
+    const old = await c.store.get(`galeri/${str(args[0], 100)}`, {
+      type: "json",
+    });
     await generic(c, args);
-    await c.store.delete(`galeri-img/${str(args[0], 100)}`);
+    if (old?.publicId) await destroyCloudinary(c.env, old.publicId);
   };
 }
 methods.listGaleri = {
@@ -422,12 +472,6 @@ methods.listGaleri = {
         b.createdAt - a.createdAt,
     ),
 };
-export async function getGaleriImage(store: Store, id: string) {
-  if (!GALERI_ID_RE.test(id)) return null;
-  const rec = await store.get(`galeri-img/${id}`, { type: "json" });
-  if (!rec || !IMG_TYPES[rec.ct]) return null;
-  return { ct: rec.ct as string, data: Buffer.from(rec.b64, "base64") };
-}
 
 const filterBy =
   (c: Collection, field: string) =>

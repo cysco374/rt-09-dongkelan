@@ -99,7 +99,7 @@ export default function GaleriPage() {
           {open && (
             <>
               <img
-                src={galeriImg(open)}
+                src={galeriImg(open, 1600)}
                 alt={open.title}
                 className="w-full max-h-[70vh] object-contain bg-black/90"
               />

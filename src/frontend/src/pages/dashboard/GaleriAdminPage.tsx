@@ -28,10 +28,8 @@ import { toast } from "sonner";
 import { type GaleriItem, api, galeriImg } from "../../api/client";
 import { fmtTanggal } from "../GaleriPage";
 
-const MAX_BYTES = 500 * 1024;
-
-/** Perkecil & kompres foto di browser agar ringan (maks 1600px, JPEG ≤ ~500 KB). */
-async function compress(file: File): Promise<string> {
+/** Perkecil foto di browser sebelum diunggah (maks 1600px, JPEG). */
+async function compress(file: File): Promise<Blob> {
   const bmp = await createImageBitmap(file);
   const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
   const c = document.createElement("canvas");
@@ -42,15 +40,31 @@ async function compress(file: File): Promise<string> {
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, c.width, c.height);
   ctx.drawImage(bmp, 0, 0, c.width, c.height);
-  let q = 0.85;
-  let url = c.toDataURL("image/jpeg", q);
-  while (url.length * 0.75 > MAX_BYTES && q > 0.4) {
-    q -= 0.1;
-    url = c.toDataURL("image/jpeg", q);
-  }
-  if (url.length * 0.75 > MAX_BYTES * 1.15)
-    throw new Error("Foto terlalu besar, pilih foto lain");
-  return url;
+  return new Promise((res, rej) =>
+    c.toBlob(
+      (b) => (b ? res(b) : rej(new Error("Gagal memproses foto"))),
+      "image/jpeg",
+      0.85,
+    ),
+  );
+}
+
+async function uploadToCloudinary(blob: Blob) {
+  const sg = await api.galeriUploadSign();
+  const fd = new FormData();
+  fd.append("file", blob);
+  fd.append("api_key", sg.apiKey);
+  fd.append("timestamp", String(sg.timestamp));
+  fd.append("folder", sg.folder);
+  fd.append("signature", sg.signature);
+  const r = await fetch(
+    `https://api.cloudinary.com/v1_1/${sg.cloudName}/image/upload`,
+    { method: "POST", body: fd },
+  );
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.secure_url)
+    throw new Error(j?.error?.message ?? "Gagal mengunggah foto ke Cloudinary");
+  return { imageUrl: j.secure_url as string, publicId: j.public_id as string };
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -68,7 +82,8 @@ export default function GaleriAdminPage() {
     description: "",
     date: today(),
   });
-  const [image, setImage] = useState<string | undefined>();
+  const [image, setImage] = useState<Blob | undefined>();
+  const [preview, setPreview] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [del, setDel] = useState<GaleriItem | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -77,12 +92,14 @@ export default function GaleriAdminPage() {
     setEdit(null);
     setForm({ title: "", description: "", date: today() });
     setImage(undefined);
+    setPreview(undefined);
     setOpen(true);
   };
   const openEdit = (g: GaleriItem) => {
     setEdit(g);
     setForm({ title: g.title, description: g.description, date: g.date });
     setImage(undefined);
+    setPreview(undefined);
     setOpen(true);
   };
 
@@ -90,7 +107,9 @@ export default function GaleriAdminPage() {
     if (!f) return;
     if (!f.type.startsWith("image/")) return toast.error("Pilih berkas gambar");
     try {
-      setImage(await compress(f));
+      const blob = await compress(f);
+      setImage(blob);
+      setPreview(URL.createObjectURL(blob));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Gagal memproses foto");
     }
@@ -101,7 +120,8 @@ export default function GaleriAdminPage() {
     if (!edit && !image) return toast.error("Pilih foto terlebih dahulu");
     setBusy(true);
     try {
-      await api.saveGaleri({ ...form, id: edit?.id }, image);
+      const uploaded = image ? await uploadToCloudinary(image) : undefined;
+      await api.saveGaleri({ ...form, id: edit?.id }, uploaded);
       toast.success(edit ? "Galeri diperbarui" : "Foto ditambahkan");
       setOpen(false);
       await qc.invalidateQueries({ queryKey: ["galeri"] });
@@ -209,7 +229,8 @@ export default function GaleriAdminPage() {
             <DialogHeader>
               <DialogTitle>{edit ? "Ubah Foto" : "Tambah Foto"}</DialogTitle>
               <DialogDescription>
-                Foto otomatis diperkecil agar ringan dibuka.
+                Foto diperkecil lalu disimpan di Cloudinary agar web tetap
+                ringan.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-1.5">
@@ -229,7 +250,7 @@ export default function GaleriAdminPage() {
               >
                 {image || edit ? (
                   <img
-                    src={image ?? galeriImg(edit as GaleriItem)}
+                    src={preview ?? galeriImg(edit as GaleriItem)}
                     alt="Pratinjau"
                     className="w-full max-h-56 object-cover"
                   />

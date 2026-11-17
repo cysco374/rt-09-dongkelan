@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { getGaleriImage, handleRpc } from "../lib/core.mts";
+import { handleRpc } from "../lib/core.mts";
 
 const mem = new Map<string, any>();
 const store = {
@@ -496,101 +496,180 @@ assert.equal(
 assert.equal((await call("deleteFeedback", [fid], ket)).status, 200);
 assert.equal((await call("listFeedbackPublic", [], "")).result.length, 4);
 
-// ---- galeri
-const PNG =
-  "data:image/png;base64," +
-  Buffer.concat([
-    Buffer.from([0x89]),
-    Buffer.from("PNG\r\n\x1a\n"),
-    Buffer.alloc(200),
-  ]).toString("base64");
+// ---- galeri (Cloudinary)
 const gal = {
   title: "Kerja Bakti",
   description: "Bersih kampung bersama warga",
   date: "2026-11-09",
 };
-assert.equal((await call("saveGaleri", [gal, PNG], "")).status, 401);
+const img1 = {
+  imageUrl:
+    "https://res.cloudinary.com/democloud/image/upload/v1700000000/rt09-galeri/abc123XYZ.jpg",
+  publicId: "rt09-galeri/abc123XYZ",
+};
+const img2 = {
+  imageUrl:
+    "https://res.cloudinary.com/democloud/image/upload/v1700000001/rt09-galeri/def456UVW.jpg",
+  publicId: "rt09-galeri/def456UVW",
+};
+// belum dikonfigurasi => 503
+assert.equal((await call("galeriUploadSign", [], ket)).status, 503);
+assert.equal((await call("saveGaleri", [gal, img1], ket)).status, 503);
+const envFull = {
+  ...env,
+  cloudinaryCloud: "democloud",
+  cloudinaryKey: "KEY123",
+  cloudinarySecret: "SECRET",
+};
+const callC = async (method: string, args: any[], tok: string) => {
+  const res = await handleRpc(
+    new Request("http://x/api/rpc", {
+      method: "POST",
+      headers: tok ? { authorization: `Bearer ${tok}` } : {},
+      body: JSON.stringify({ method, args }),
+    }),
+    store as never,
+    envFull,
+  );
+  return { status: res.status, ...(await res.json()) } as any;
+};
+const destroyed: string[] = [];
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (url: any, init: any) => {
+  assert.match(
+    String(url),
+    /api\.cloudinary\.com\/v1_1\/democloud\/image\/destroy/,
+  );
+  const p = new URLSearchParams(init.body);
+  assert.equal(p.get("api_key"), "KEY123");
+  const expect = createHash("sha1")
+    .update(
+      `public_id=${p.get("public_id")}&timestamp=${p.get("timestamp")}SECRET`,
+    )
+    .digest("hex");
+  assert.equal(p.get("signature"), expect, "destroy signature");
+  destroyed.push(p.get("public_id")!);
+  return new Response("{}");
+}) as any;
+
+assert.equal((await callC("galeriUploadSign", [], "")).status, 401);
 assert.equal(
-  (await call("saveGaleri", [gal, PNG], ben2)).status,
+  (await callC("galeriUploadSign", [], ben2)).status,
   403,
   "bendahara cannot",
 );
+const sg = await callC("galeriUploadSign", [], sek);
+assert.equal(sg.status, 200);
+assert.equal(sg.result.cloudName, "democloud");
 assert.equal(
-  (await call("saveGaleri", [gal, undefined], ket)).status,
+  sg.result.signature,
+  createHash("sha1")
+    .update(`folder=rt09-galeri&timestamp=${sg.result.timestamp}SECRET`)
+    .digest("hex"),
+);
+assert.equal(
+  JSON.stringify(sg).includes("SECRET"),
+  false,
+  "secret never leaves server",
+);
+assert.equal((await callC("saveGaleri", [gal, img1], ben2)).status, 403);
+assert.equal(
+  (await callC("saveGaleri", [gal, undefined], ket)).status,
   400,
   "photo required",
 );
 assert.equal(
-  (await call("saveGaleri", [gal, "data:text/html;base64,PGI+"], ket)).status,
+  (
+    await callC(
+      "saveGaleri",
+      [gal, { ...img1, imageUrl: "https://evil.com/x.jpg" }],
+      ket,
+    )
+  ).status,
   400,
-  "not image",
+  "foreign url",
 );
 assert.equal(
   (
-    await call(
+    await callC(
+      "saveGaleri",
+      [gal, { ...img1, publicId: "../meta/admin" }],
+      ket,
+    )
+  ).status,
+  400,
+  "bad public id",
+);
+assert.equal(
+  (
+    await callC(
       "saveGaleri",
       [
         gal,
-        "data:image/png;base64," + Buffer.from("not a png").toString("base64"),
+        {
+          ...img1,
+          imageUrl:
+            "https://res.cloudinary.com/othercloud/image/upload/v1/rt09-galeri/abc123XYZ.jpg",
+        },
       ],
       ket,
     )
   ).status,
   400,
-  "bad magic",
+  "other cloud",
 );
 assert.equal(
-  (
-    await call(
-      "saveGaleri",
-      [
-        gal,
-        "data:image/jpeg;base64," +
-          Buffer.alloc(700 * 1024, 0xff).toString("base64"),
-      ],
-      ket,
-    )
-  ).status,
-  413,
+  (await callC("saveGaleri", [{ ...gal, title: "x" }, img1], ket)).status,
+  400,
 );
-const g1 = await call("saveGaleri", [gal, PNG], sek);
+const g1 = await callC("saveGaleri", [gal, img1], sek);
 assert.equal(g1.status, 200, JSON.stringify(g1));
-await call(
+await callC(
   "saveGaleri",
-  [{ ...gal, title: "Ronda Malam", date: "2026-11-12" }, PNG],
+  [{ ...gal, title: "Ronda Malam", date: "2026-11-12" }, img2],
   ket,
 );
-const gl = (await call("listGaleri", [], "")).result;
+const gl = (await callC("listGaleri", [], "")).result;
 assert.equal(gl.length, 2);
 assert.equal(gl[0].title, "Ronda Malam", "newest date first");
-assert.equal(gl[0].imageVersion > 0, true);
+assert.equal(gl[1].imageUrl, img1.imageUrl);
+// edit tanpa ganti foto: foto tetap, tidak ada destroy
 assert.equal(
-  (await getGaleriImage(store as never, g1.result))?.ct,
-  "image/png",
+  (
+    await callC(
+      "saveGaleri",
+      [{ ...gal, id: g1.result, title: "Kerja Bakti Akbar" }],
+      ket,
+    )
+  ).status,
+  200,
 );
 assert.equal(
-  await getGaleriImage(store as never, "../meta/admin"),
-  null,
-  "id validated",
+  (await callC("listGaleri", [], "")).result.find(
+    (g: any) => g.id === g1.result,
+  ).imageUrl,
+  img1.imageUrl,
 );
-// edit tanpa ganti foto mempertahankan foto
-const edited = await call(
-  "saveGaleri",
-  [{ ...gal, id: g1.result, title: "Kerja Bakti Akbar" }],
-  ket,
-);
-assert.equal(edited.status, 200);
-assert.ok(await getGaleriImage(store as never, g1.result));
+assert.equal(destroyed.length, 0);
+// ganti foto: foto lama dihapus di Cloudinary
+const img3 = {
+  imageUrl:
+    "https://res.cloudinary.com/democloud/image/upload/v1700000002/rt09-galeri/ghi789RST.png",
+  publicId: "rt09-galeri/ghi789RST",
+};
 assert.equal(
-  (await call("saveGaleri", [{ ...gal, id: "galeri_1_abcdef" }], ket)).status,
+  (await callC("saveGaleri", [{ ...gal, id: g1.result }, img3], ket)).status,
+  200,
+);
+assert.deepEqual(destroyed, ["rt09-galeri/abc123XYZ"]);
+assert.equal(
+  (await callC("saveGaleri", [{ ...gal, id: "galeri_1_abcdef" }], ket)).status,
   404,
 );
-assert.equal((await call("deleteGaleri", [g1.result], ben2)).status, 403);
-assert.equal((await call("deleteGaleri", [g1.result], ket)).status, 200);
-assert.equal(
-  await getGaleriImage(store as never, g1.result),
-  null,
-  "image removed with item",
-);
-assert.equal((await call("addGaleri", [{}], adminTok)).status, 404);
+assert.equal((await callC("deleteGaleri", [g1.result], ben2)).status, 403);
+assert.equal((await callC("deleteGaleri", [g1.result], ket)).status, 200);
+assert.deepEqual(destroyed, ["rt09-galeri/abc123XYZ", "rt09-galeri/ghi789RST"]);
+assert.equal((await callC("listGaleri", [], "")).result.length, 1);
+assert.equal((await callC("addGaleri", [{}], adminTok)).status, 404);
+globalThis.fetch = realFetch;
 console.log("ALL OK");

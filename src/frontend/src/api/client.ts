@@ -76,11 +76,24 @@ export interface GaleriItem {
   title: string;
   description: string;
   date: string; // YYYY-MM-DD
-  imageVersion: number;
+  imageUrl: string; // Cloudinary secure_url
+  publicId: string;
   createdAt: bigint;
 }
-export const galeriImg = (g: GaleriItem) =>
-  `/api/img/${g.id}?v=${g.imageVersion}`;
+/** URL Cloudinary dengan transformasi otomatis (format & kualitas) dan lebar tertentu. */
+export const galeriImg = (g: GaleriItem, width = 800) =>
+  g.imageUrl.replace(
+    "/image/upload/",
+    `/image/upload/f_auto,q_auto,w_${width}/`,
+  );
+
+export interface CloudinarySign {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  folder: string;
+  signature: string;
+}
 
 export interface AppUser {
   username: string;
@@ -145,9 +158,10 @@ export interface ApiActor extends backendInterface {
   login(username: string, passwordHash: string): Promise<string>;
   whoami(): Promise<Session>;
   listGaleri(): Promise<GaleriItem[]>;
+  galeriUploadSign(): Promise<CloudinarySign>;
   saveGaleri(
     d: { id?: string; title: string; description: string; date: string },
-    image?: string,
+    image?: { imageUrl: string; publicId: string },
   ): Promise<string>;
   deleteGaleri(id: string): Promise<void>;
   submitFeedback(name: string, phone: string, message: string): Promise<string>;
@@ -242,6 +256,7 @@ const names = [
   "seedDemoMore",
   "whoami",
   "listGaleri",
+  "galeriUploadSign",
   "saveGaleri",
   "deleteGaleri",
   "submitFeedback",
