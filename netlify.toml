@@ -12,8 +12,8 @@
   force = true
 
 [[redirects]]
-  from = "/api/img/:id"
-  to = "/.netlify/functions/img?id=:id"
+  from = "/api/img/*"
+  to = "/.netlify/functions/img?id=:splat"
   status = 200
   force = true
 

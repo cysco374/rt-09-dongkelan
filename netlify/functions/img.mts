@@ -4,7 +4,10 @@ import { getGaleriImage } from "../lib/core.mts";
 
 // GET /api/img/<id>?v=<versi> -> foto galeri (publik, di-cache lama karena URL berversi)
 export default async (req: Request) => {
-  const id = new URL(req.url).searchParams.get("id") ?? "";
+  const url = new URL(req.url);
+  // id dari query (?id=) atau, bila redirect tidak mengisinya, dari segmen terakhir path
+  let id = url.searchParams.get("id") ?? "";
+  if (!id.startsWith("galeri_")) id = url.pathname.split("/").pop() ?? "";
   const store = getStore({ name: "rt09", consistency: "strong" });
   const img = await getGaleriImage(store as never, id);
   if (!img) return new Response("Not found", { status: 404 });
