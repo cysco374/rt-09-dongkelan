@@ -382,6 +382,14 @@ async function destroyCloudinary(env: Env, publicId: string) {
     console.error("cloudinary destroy gagal", e); // jangan menggagalkan penghapusan data
   }
 }
+// Foto lama (sebelum Cloudinary) tersimpan di Blobs: tetap disajikan sampai diganti/dihapus.
+const LEGACY_TYPES = ["image/jpeg", "image/png", "image/webp"];
+export async function getGaleriImage(store: Store, id: string) {
+  if (!GALERI_ID_RE.test(id)) return null;
+  const rec = await store.get(`galeri-img/${id}`, { type: "json" });
+  if (!rec || !LEGACY_TYPES.includes(rec.ct)) return null;
+  return { ct: rec.ct as string, data: Buffer.from(rec.b64, "base64") };
+}
 methods.galeriUploadSign = {
   auth: true,
   roles: WRITE_ROLES.galeri,
@@ -446,10 +454,12 @@ methods.saveGaleri = {
       date,
       imageUrl,
       publicId,
+      ...(old?.imageVersion && !publicId ? { imageVersion: old.imageVersion } : {}),
       createdAt: old?.createdAt ?? Date.now(),
     });
     if (old && image && old.publicId && old.publicId !== publicId)
       await destroyCloudinary(env, old.publicId);
+    if (old && image && !old.publicId) await store.delete(`galeri-img/${id}`);
     return id;
   },
 };
@@ -461,6 +471,7 @@ methods.saveGaleri = {
     });
     await generic(c, args);
     if (old?.publicId) await destroyCloudinary(c.env, old.publicId);
+    await c.store.delete(`galeri-img/${str(args[0], 100)}`);
   };
 }
 methods.listGaleri = {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { handleRpc } from "../lib/core.mts";
+import { getGaleriImage, handleRpc } from "../lib/core.mts";
 
 const mem = new Map<string, any>();
 const store = {
@@ -671,5 +671,14 @@ assert.equal((await callC("deleteGaleri", [g1.result], ket)).status, 200);
 assert.deepEqual(destroyed, ["rt09-galeri/abc123XYZ", "rt09-galeri/ghi789RST"]);
 assert.equal((await callC("listGaleri", [], "")).result.length, 1);
 assert.equal((await callC("addGaleri", [{}], adminTok)).status, 404);
+// foto lama (Blobs) tetap disajikan, lalu dibersihkan saat diganti
+await store.setJSON("galeri/galeri_1_aaaaaa", { id: "galeri_1_aaaaaa", title: "Lama", description: "d", date: "2026-01-01", imageVersion: 5, createdAt: 1 });
+await store.setJSON("galeri-img/galeri_1_aaaaaa", { ct: "image/png", b64: Buffer.from("x").toString("base64") });
+assert.equal((await getGaleriImage(store as never, "galeri_1_aaaaaa"))?.ct, "image/png");
+assert.equal(await getGaleriImage(store as never, "../meta/admin"), null, "id validated");
+assert.equal((await callC("saveGaleri", [{ ...gal, id: "galeri_1_aaaaaa", title: "Lama2" }], ket)).status, 200);
+assert.ok(await getGaleriImage(store as never, "galeri_1_aaaaaa"), "kept when photo not replaced");
+assert.equal((await callC("saveGaleri", [{ ...gal, id: "galeri_1_aaaaaa" }, img2], ket)).status, 200);
+assert.equal(await getGaleriImage(store as never, "galeri_1_aaaaaa"), null, "legacy blob removed after migrate");
 globalThis.fetch = realFetch;
 console.log("ALL OK");

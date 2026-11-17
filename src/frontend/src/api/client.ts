@@ -76,8 +76,9 @@ export interface GaleriItem {
   title: string;
   description: string;
   date: string; // YYYY-MM-DD
-  imageUrl: string; // Cloudinary secure_url
+  imageUrl: string; // Cloudinary secure_url ("" untuk foto lama di Blobs)
   publicId: string;
+  imageVersion?: number; // hanya foto lama
   createdAt: bigint;
 }
 /** URL Cloudinary dengan transformasi otomatis (format & kualitas) dan lebar tertentu. */
