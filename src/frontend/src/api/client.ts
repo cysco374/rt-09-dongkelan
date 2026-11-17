@@ -83,10 +83,12 @@ export interface GaleriItem {
 }
 /** URL Cloudinary dengan transformasi otomatis (format & kualitas) dan lebar tertentu. */
 export const galeriImg = (g: GaleriItem, width = 800) =>
-  g.imageUrl.replace(
-    "/image/upload/",
-    `/image/upload/f_auto,q_auto,w_${width}/`,
-  );
+  g.imageUrl
+    ? g.imageUrl.replace(
+        "/image/upload/",
+        `/image/upload/f_auto,q_auto,w_${width}/`,
+      )
+    : `/api/img/${g.id}?v=${g.imageVersion ?? 0}`; // foto lama (Blobs)
 
 export interface CloudinarySign {
   cloudName: string;
