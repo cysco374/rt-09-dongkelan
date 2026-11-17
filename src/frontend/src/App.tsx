@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 import DashboardLayout from "./layouts/DashboardLayout";
 import PublicLayout from "./layouts/PublicLayout";
+import GaleriPage from "./pages/GaleriPage";
 import HomePage from "./pages/HomePage";
 import KritikSaranPage from "./pages/KritikSaranPage";
 import LayananPage from "./pages/LayananPage";
@@ -16,6 +17,7 @@ import LoginPage from "./pages/LoginPage";
 import PengumumanPublicPage from "./pages/PengumumanPublicPage";
 import DashboardHome from "./pages/dashboard/DashboardHome";
 import FasilitasPage from "./pages/dashboard/FasilitasPage";
+import GaleriAdminPage from "./pages/dashboard/GaleriAdminPage";
 import IuranPage from "./pages/dashboard/IuranPage";
 import KKPage from "./pages/dashboard/KKPage";
 import KritikSaranAdminPage from "./pages/dashboard/KritikSaranAdminPage";
@@ -72,6 +74,18 @@ const dashboardKritikRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/dashboard/kritik-saran",
   component: KritikSaranAdminPage,
+});
+
+const galeriRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/galeri",
+  component: GaleriPage,
+});
+
+const dashboardGaleriRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/dashboard/galeri",
+  component: GaleriAdminPage,
 });
 
 const loginRoute = createRoute({
@@ -164,6 +178,7 @@ const routeTree = rootRoute.addChildren([
     pengumumanPublicRoute,
     layananRoute,
     kritikSaranRoute,
+    galeriRoute,
     loginRoute,
   ]),
   dashboardLayoutRoute.addChildren([
@@ -179,6 +194,7 @@ const routeTree = rootRoute.addChildren([
     dashboardLaporanRoute,
     dashboardPenggunaRoute,
     dashboardKritikRoute,
+    dashboardGaleriRoute,
   ]),
 ]);
 

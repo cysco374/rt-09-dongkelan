@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { handleRpc } from "../lib/core.mts";
+import { getGaleriImage, handleRpc } from "../lib/core.mts";
 
 const mem = new Map<string, any>();
 const store = {
@@ -270,13 +270,29 @@ assert.equal(viaNik.result.kk.number, "3402010101260001");
 // ---- peran: ketua / bendahara / sekretaris
 const adminTok = token;
 const mkUser = (username: string, role: string, pw: string) =>
-  call("addUser", [{ username, name: username.toUpperCase(), role, passwordHash: h(pw) }], adminTok);
+  call(
+    "addUser",
+    [{ username, name: username.toUpperCase(), role, passwordHash: h(pw) }],
+    adminTok,
+  );
 assert.equal((await mkUser("pak.ketua", "ketua", "k1")).status, 200);
 assert.equal((await mkUser("bu.bendahara", "bendahara", "b1")).status, 200);
 assert.equal((await mkUser("bu.sekretaris", "sekretaris", "s1")).status, 200);
-assert.equal((await mkUser("pak.ketua", "ketua", "x")).status, 409, "dup username");
-assert.equal((await mkUser("admin", "ketua", "x")).status, 409, "admin name reserved");
-assert.equal((await mkUser("hacker", "admin", "x")).status, 400, "cannot mint admin");
+assert.equal(
+  (await mkUser("pak.ketua", "ketua", "x")).status,
+  409,
+  "dup username",
+);
+assert.equal(
+  (await mkUser("admin", "ketua", "x")).status,
+  409,
+  "admin name reserved",
+);
+assert.equal(
+  (await mkUser("hacker", "admin", "x")).status,
+  400,
+  "cannot mint admin",
+);
 const login = async (u: string, p: string) => call("login", [u, h(p)], "");
 const ket = (await login("pak.ketua", "k1")).result;
 const ben = (await login("bu.bendahara", "b1")).result;
@@ -286,10 +302,49 @@ assert.equal((await login("pak.ketua", "salah")).status, 401);
 assert.equal((await login("tidakada", "x")).status, 401);
 assert.equal((await call("whoami", [], ben)).result.r, "bendahara");
 
-const newWarga = { id: "", nik: "3402019999999999", fullName: "Uji Peran", dob: "1990-01-01", gender: "male", address: "x", phone: "0", status: "tetap", kkNumber: "", maritalStatus: "kawin", job: "x", createdAt: { __bi: "0" } };
-const newIuran = { id: "", wargaId: wid, wargaName: "Uji", iuranType: "monthly", month: { __bi: "1" }, year: { __bi: "2026" }, total: { __bi: "25000" }, status: "unpaid", createdAt: { __bi: "0" } };
-const newPeng = { id: "", title: "Uji", content: "isi", date: "2026-01-01", status: "active", createdAt: { __bi: "0" } };
-const newFas = { id: "", name: "Aset Uji", fasilitasType: "equipment", condition: "good", acquisitionYear: { __bi: "2024" }, location: "x", description: "x", createdAt: { __bi: "0" } };
+const newWarga = {
+  id: "",
+  nik: "3402019999999999",
+  fullName: "Uji Peran",
+  dob: "1990-01-01",
+  gender: "male",
+  address: "x",
+  phone: "0",
+  status: "tetap",
+  kkNumber: "",
+  maritalStatus: "kawin",
+  job: "x",
+  createdAt: { __bi: "0" },
+};
+const newIuran = {
+  id: "",
+  wargaId: wid,
+  wargaName: "Uji",
+  iuranType: "monthly",
+  month: { __bi: "1" },
+  year: { __bi: "2026" },
+  total: { __bi: "25000" },
+  status: "unpaid",
+  createdAt: { __bi: "0" },
+};
+const newPeng = {
+  id: "",
+  title: "Uji",
+  content: "isi",
+  date: "2026-01-01",
+  status: "active",
+  createdAt: { __bi: "0" },
+};
+const newFas = {
+  id: "",
+  name: "Aset Uji",
+  fasilitasType: "equipment",
+  condition: "good",
+  acquisitionYear: { __bi: "2024" },
+  location: "x",
+  description: "x",
+  createdAt: { __bi: "0" },
+};
 // bendahara: iuran ya; warga/pengumuman/aset tidak; baca ya
 assert.equal((await call("addIuran", [newIuran], ben)).status, 200);
 assert.equal((await call("addWarga", [newWarga], ben)).status, 403);
@@ -305,52 +360,237 @@ assert.equal((await call("addIuran", [newIuran], sek)).status, 403);
 assert.equal((await call("deleteIuran", ["x"], sek)).status, 403);
 // ketua: semua; kelola akun; tapi bukan seed / kredensial admin
 assert.equal((await call("addIuran", [newIuran], ket)).status, 200);
-assert.equal((await call("addWarga", [{ ...newWarga, nik: "3402019999999998" }], ket)).status, 200);
+assert.equal(
+  (await call("addWarga", [{ ...newWarga, nik: "3402019999999998" }], ket))
+    .status,
+  200,
+);
 assert.equal((await call("listUsers", [], ket)).result.length, 3);
-assert.equal((await call("listUsers", [], ket)).result[0].hash, undefined, "hash not leaked");
+assert.equal(
+  (await call("listUsers", [], ket)).result[0].hash,
+  undefined,
+  "hash not leaked",
+);
 assert.equal((await call("listUsers", [], ben)).status, 403);
 assert.equal((await call("seedDemo", [], ket)).status, 403);
-assert.equal((await call("setAdminCredentials", ["a", h("b"), h("c")], ket)).status, 403);
+assert.equal(
+  (await call("setAdminCredentials", ["a", h("b"), h("c")], ket)).status,
+  403,
+);
 // ganti password sendiri
-assert.equal((await call("changeMyPassword", [h("salah"), h("baru1")], ben)).result, false);
-assert.equal((await call("changeMyPassword", [h("b1"), h("baru1")], ben)).result, true);
+assert.equal(
+  (await call("changeMyPassword", [h("salah"), h("baru1")], ben)).result,
+  false,
+);
+assert.equal(
+  (await call("changeMyPassword", [h("b1"), h("baru1")], ben)).result,
+  true,
+);
 assert.equal((await login("bu.bendahara", "b1")).status, 401);
 assert.ok((await login("bu.bendahara", "baru1")).result);
 // reset oleh ketua, nonaktifkan => token lama langsung ditolak
-assert.equal((await call("resetUserPassword", ["bu.sekretaris", h("reset1")], ket)).status, 200);
+assert.equal(
+  (await call("resetUserPassword", ["bu.sekretaris", h("reset1")], ket)).status,
+  200,
+);
 assert.ok((await login("bu.sekretaris", "reset1")).result);
-assert.equal((await call("updateUser", [{ username: "bu.bendahara", disabled: true }], ket)).status, 200);
-assert.equal((await call("listWarga", [], ben)).status, 401, "disabled => token invalid");
+assert.equal(
+  (
+    await call(
+      "updateUser",
+      [{ username: "bu.bendahara", disabled: true }],
+      ket,
+    )
+  ).status,
+  200,
+);
+assert.equal(
+  (await call("listWarga", [], ben)).status,
+  401,
+  "disabled => token invalid",
+);
 assert.equal((await login("bu.bendahara", "baru1")).status, 401);
-assert.equal((await call("updateUser", [{ username: "bu.bendahara", disabled: false, role: "sekretaris" }], ket)).status, 200);
-assert.equal((await call("addIuran", [newIuran], ben)).status, 401, "role changed => old token invalid");
+assert.equal(
+  (
+    await call(
+      "updateUser",
+      [{ username: "bu.bendahara", disabled: false, role: "sekretaris" }],
+      ket,
+    )
+  ).status,
+  200,
+);
+assert.equal(
+  (await call("addIuran", [newIuran], ben)).status,
+  401,
+  "role changed => old token invalid",
+);
 assert.equal((await call("deleteUser", ["bu.bendahara"], ket)).status, 200);
 // admin tetap punya akses penuh
-assert.equal((await call("addWarga", [{ ...newWarga, nik: "3402019999999997" }], adminTok)).status, 200);
-
+assert.equal(
+  (await call("addWarga", [{ ...newWarga, nik: "3402019999999997" }], adminTok))
+    .status,
+  200,
+);
 
 await mkUser("bendahara2", "bendahara", "b2");
 const ben2 = (await login("bendahara2", "b2")).result;
 // ---- kritik & saran
-const fb = (n: string, ph: string, m: string) => call("submitFeedback", [n, ph, m], "");
-assert.equal((await fb("A", "0812345678", "Pelayanan sudah bagus")).status, 400, "name too short");
-assert.equal((await fb("Ani", "abc", "Pelayanan sudah bagus")).status, 400, "bad phone");
-assert.equal((await fb("Ani", "0812345678", "ok")).status, 400, "msg too short");
-assert.equal((await fb("Ani", "0812-3456-78", "Tolong perbaiki lampu jalan gang 2")).status, 200);
-assert.equal((await fb("Ani", "081234567 8", "Tolong perbaiki lampu jalan gang 2")).status, 409, "duplicate");
-for (let k = 0; k < 4; k++) await fb("Ani", "08123456 78", `Masukan nomor ${k} dari Ani`);
-assert.equal((await fb("Ani", "0812345678", "Masukan keenam dari Ani")).status, 429, "daily cap");
+const fb = (n: string, ph: string, m: string) =>
+  call("submitFeedback", [n, ph, m], "");
+assert.equal(
+  (await fb("A", "0812345678", "Pelayanan sudah bagus")).status,
+  400,
+  "name too short",
+);
+assert.equal(
+  (await fb("Ani", "abc", "Pelayanan sudah bagus")).status,
+  400,
+  "bad phone",
+);
+assert.equal(
+  (await fb("Ani", "0812345678", "ok")).status,
+  400,
+  "msg too short",
+);
+assert.equal(
+  (await fb("Ani", "0812-3456-78", "Tolong perbaiki lampu jalan gang 2"))
+    .status,
+  200,
+);
+assert.equal(
+  (await fb("Ani", "081234567 8", "Tolong perbaiki lampu jalan gang 2")).status,
+  409,
+  "duplicate",
+);
+for (let k = 0; k < 4; k++)
+  await fb("Ani", "08123456 78", `Masukan nomor ${k} dari Ani`);
+assert.equal(
+  (await fb("Ani", "0812345678", "Masukan keenam dari Ani")).status,
+  429,
+  "daily cap",
+);
 const pubList = (await call("listFeedbackPublic", [], "")).result;
 assert.equal(pubList.length, 5);
 assert.equal(pubList[0].phone, undefined, "phone never public");
 assert.equal(pubList[0].name, "Ani");
-assert.equal((await call("listFeedback", [], "")).status, 401, "full list is private");
+assert.equal(
+  (await call("listFeedback", [], "")).status,
+  401,
+  "full list is private",
+);
 const full = await call("listFeedback", [], ket);
 assert.equal(full.status, 200);
 assert.equal(full.result[0].phone, "0812345678");
-assert.equal((await call("addFeedback", [{}], adminTok)).status, 404, "no admin-side add");
+assert.equal(
+  (await call("addFeedback", [{}], adminTok)).status,
+  404,
+  "no admin-side add",
+);
 const fid = pubList[0].id;
-assert.equal((await call("deleteFeedback", [fid], ben2)).status, 403, "bendahara cannot delete");
+assert.equal(
+  (await call("deleteFeedback", [fid], ben2)).status,
+  403,
+  "bendahara cannot delete",
+);
 assert.equal((await call("deleteFeedback", [fid], ket)).status, 200);
 assert.equal((await call("listFeedbackPublic", [], "")).result.length, 4);
+
+// ---- galeri
+const PNG =
+  "data:image/png;base64," +
+  Buffer.concat([
+    Buffer.from([0x89]),
+    Buffer.from("PNG\r\n\x1a\n"),
+    Buffer.alloc(200),
+  ]).toString("base64");
+const gal = {
+  title: "Kerja Bakti",
+  description: "Bersih kampung bersama warga",
+  date: "2026-11-09",
+};
+assert.equal((await call("saveGaleri", [gal, PNG], "")).status, 401);
+assert.equal(
+  (await call("saveGaleri", [gal, PNG], ben2)).status,
+  403,
+  "bendahara cannot",
+);
+assert.equal(
+  (await call("saveGaleri", [gal, undefined], ket)).status,
+  400,
+  "photo required",
+);
+assert.equal(
+  (await call("saveGaleri", [gal, "data:text/html;base64,PGI+"], ket)).status,
+  400,
+  "not image",
+);
+assert.equal(
+  (
+    await call(
+      "saveGaleri",
+      [
+        gal,
+        "data:image/png;base64," + Buffer.from("not a png").toString("base64"),
+      ],
+      ket,
+    )
+  ).status,
+  400,
+  "bad magic",
+);
+assert.equal(
+  (
+    await call(
+      "saveGaleri",
+      [
+        gal,
+        "data:image/jpeg;base64," +
+          Buffer.alloc(700 * 1024, 0xff).toString("base64"),
+      ],
+      ket,
+    )
+  ).status,
+  413,
+);
+const g1 = await call("saveGaleri", [gal, PNG], sek);
+assert.equal(g1.status, 200, JSON.stringify(g1));
+await call(
+  "saveGaleri",
+  [{ ...gal, title: "Ronda Malam", date: "2026-11-12" }, PNG],
+  ket,
+);
+const gl = (await call("listGaleri", [], "")).result;
+assert.equal(gl.length, 2);
+assert.equal(gl[0].title, "Ronda Malam", "newest date first");
+assert.equal(gl[0].imageVersion > 0, true);
+assert.equal(
+  (await getGaleriImage(store as never, g1.result))?.ct,
+  "image/png",
+);
+assert.equal(
+  await getGaleriImage(store as never, "../meta/admin"),
+  null,
+  "id validated",
+);
+// edit tanpa ganti foto mempertahankan foto
+const edited = await call(
+  "saveGaleri",
+  [{ ...gal, id: g1.result, title: "Kerja Bakti Akbar" }],
+  ket,
+);
+assert.equal(edited.status, 200);
+assert.ok(await getGaleriImage(store as never, g1.result));
+assert.equal(
+  (await call("saveGaleri", [{ ...gal, id: "galeri_1_abcdef" }], ket)).status,
+  404,
+);
+assert.equal((await call("deleteGaleri", [g1.result], ben2)).status, 403);
+assert.equal((await call("deleteGaleri", [g1.result], ket)).status, 200);
+assert.equal(
+  await getGaleriImage(store as never, g1.result),
+  null,
+  "image removed with item",
+);
+assert.equal((await call("addGaleri", [{}], adminTok)).status, 404);
 console.log("ALL OK");

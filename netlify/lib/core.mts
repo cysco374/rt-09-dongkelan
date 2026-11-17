@@ -34,6 +34,7 @@ const COLLECTIONS = [
   "fasilitas",
   "pengurus",
   "feedback",
+  "galeri",
 ] as const;
 type Collection = (typeof COLLECTIONS)[number];
 
@@ -49,6 +50,7 @@ const WRITE_ROLES: Record<string, Role[]> = {
   pengurus: ["ketua", "sekretaris"],
   iuran: ["ketua", "bendahara"],
   feedback: ["ketua", "sekretaris"], // moderasi (hapus)
+  galeri: ["ketua", "sekretaris"],
 };
 const USERNAME_RE = /^[a-z0-9._-]{3,30}$/;
 
@@ -233,7 +235,7 @@ const methods: Record<string, Method> = {};
 
 for (const c of COLLECTIONS) {
   const Cap = c === "kk" ? "KK" : c[0].toUpperCase() + c.slice(1);
-  const pub = c === "pengurus";
+  const pub = c === "pengurus" || c === "galeri";
   methods[`add${Cap}`] = {
     auth: true,
     roles: WRITE_ROLES[c],
@@ -299,7 +301,10 @@ methods.submitFeedback = {
     const dayAgo = Date.now() - 24 * 3600 * 1000;
     const recent = all.filter((f) => f.phone === ph && f.createdAt > dayAgo);
     if (recent.length >= 5)
-      throw new HttpError(429, "Batas pengiriman harian tercapai. Coba lagi besok.");
+      throw new HttpError(
+        429,
+        "Batas pengiriman harian tercapai. Coba lagi besok.",
+      );
     if (recent.some((f) => f.message === msg))
       throw new HttpError(409, "Masukan yang sama sudah terkirim");
     const id = newId("feedback");
@@ -327,6 +332,102 @@ methods.listFeedbackPublic = {
         createdAt: f.createdAt,
       })),
 };
+
+// ---------- galeri kegiatan ----------
+// Foto disimpan terpisah (galeri-img/<id>) dan disajikan oleh function `img`.
+delete methods.addGaleri;
+delete methods.updateGaleri;
+delete methods.getGaleri;
+const MAX_IMG_BYTES = 600 * 1024;
+const IMG_TYPES: Record<string, (b: Buffer) => boolean> = {
+  "image/jpeg": (b) => b[0] === 0xff && b[1] === 0xd8,
+  "image/png": (b) => b.subarray(1, 4).toString() === "PNG",
+  "image/webp": (b) =>
+    b.subarray(0, 4).toString() === "RIFF" &&
+    b.subarray(8, 12).toString() === "WEBP",
+};
+function parseImage(dataUrl: unknown) {
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(
+    String(dataUrl ?? ""),
+  );
+  if (!m) throw new HttpError(400, "Foto harus berformat JPG, PNG, atau WebP");
+  const buf = Buffer.from(m[2], "base64");
+  if (buf.length > MAX_IMG_BYTES)
+    throw new HttpError(
+      413,
+      "Ukuran foto terlalu besar (maks 600 KB setelah dikompres)",
+    );
+  if (!IMG_TYPES[m[1]](buf))
+    throw new HttpError(400, "Berkas foto tidak valid");
+  return { ct: m[1], b64: m[2] };
+}
+export const GALERI_ID_RE = /^galeri_\d+_[a-f0-9]{6}$/;
+methods.saveGaleri = {
+  auth: true,
+  roles: WRITE_ROLES.galeri,
+  fn: async ({ store }, [d, image]) => {
+    const title = str(d?.title, 100).trim();
+    const description = str(d?.description, 500).trim();
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(d?.date)) ? d.date : "";
+    if (title.length < 3)
+      throw new HttpError(400, "Judul wajib diisi (min. 3 huruf)");
+    if (!description) throw new HttpError(400, "Deskripsi singkat wajib diisi");
+    if (!date) throw new HttpError(400, "Tanggal kegiatan tidak valid");
+    const editing = typeof d?.id === "string" && d.id !== "";
+    let id: string;
+    let old: Json | null = null;
+    if (editing) {
+      if (!GALERI_ID_RE.test(d.id)) throw new HttpError(400, "ID tidak valid");
+      id = d.id;
+      old = await store.get(`galeri/${id}`, { type: "json" });
+      if (!old) throw new HttpError(404, "Data tidak ditemukan");
+    } else {
+      if (!image) throw new HttpError(400, "Foto wajib dipilih");
+      if ((await listAll(store, "galeri")).length >= 100)
+        throw new HttpError(
+          409,
+          "Galeri penuh (maks 100 foto). Hapus yang lama dulu.",
+        );
+      id = newId("galeri");
+    }
+    let version = old?.imageVersion ?? 0;
+    if (image) {
+      await store.setJSON(`galeri-img/${id}`, parseImage(image));
+      version = Date.now();
+    }
+    await store.setJSON(`galeri/${id}`, {
+      id,
+      title,
+      description,
+      date,
+      imageVersion: version,
+      createdAt: old?.createdAt ?? Date.now(),
+    });
+    return id;
+  },
+};
+{
+  const generic = methods.deleteGaleri.fn;
+  methods.deleteGaleri.fn = async (c, args) => {
+    await generic(c, args);
+    await c.store.delete(`galeri-img/${str(args[0], 100)}`);
+  };
+}
+methods.listGaleri = {
+  auth: false,
+  fn: async ({ store }) =>
+    (await listAll(store, "galeri")).sort(
+      (a, b) =>
+        String(b.date).localeCompare(String(a.date)) ||
+        b.createdAt - a.createdAt,
+    ),
+};
+export async function getGaleriImage(store: Store, id: string) {
+  if (!GALERI_ID_RE.test(id)) return null;
+  const rec = await store.get(`galeri-img/${id}`, { type: "json" });
+  if (!rec || !IMG_TYPES[rec.ct]) return null;
+  return { ct: rec.ct as string, data: Buffer.from(rec.b64, "base64") };
+}
 
 const filterBy =
   (c: Collection, field: string) =>
@@ -983,7 +1084,10 @@ methods.addUser = {
     const username = str(d?.username, 30).trim().toLowerCase();
     const name = str(d?.name, 80).trim();
     if (!USERNAME_RE.test(username))
-      throw new HttpError(400, "Username 3–30 karakter: huruf kecil, angka, titik, - atau _");
+      throw new HttpError(
+        400,
+        "Username 3–30 karakter: huruf kecil, angka, titik, - atau _",
+      );
     if (!name) throw new HttpError(400, "Nama lengkap wajib diisi");
     if (!(ROLES as readonly string[]).includes(d?.role))
       throw new HttpError(400, "Peran tidak valid");
@@ -1066,7 +1170,11 @@ methods.changeMyPassword = {
     if (!rec || !HASH_RE.test(String(next))) return false;
     if (!safeEq(scryptHex(String(current), rec.salt), rec.hash)) return false;
     const salt = randomBytes(16).toString("hex");
-    await store.setJSON(key, { ...rec, salt, hash: scryptHex(String(next), salt) });
+    await store.setJSON(key, {
+      ...rec,
+      salt,
+      hash: scryptHex(String(next), salt),
+    });
     return true;
   },
 };
@@ -1111,7 +1219,10 @@ export async function handleRpc(
       session.r !== "admin" &&
       !m.roles.includes(session.r)
     )
-      throw new HttpError(403, "Peran Anda tidak memiliki akses untuk aksi ini");
+      throw new HttpError(
+        403,
+        "Peran Anda tidak memiliki akses untuk aksi ini",
+      );
 
     const result = await m.fn(
       { store, env, authed, session },

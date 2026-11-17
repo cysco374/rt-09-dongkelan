@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CreditCard,
   FileText,
+  Images,
   LayoutDashboard,
   LogOut,
   Megaphone,
@@ -79,6 +80,12 @@ const sidebarItems = [
     to: "/dashboard/pengurus",
     icon: UserCog,
     ocid: "dashboard.nav_link.pengurus",
+  },
+  {
+    label: "Galeri",
+    to: "/dashboard/galeri",
+    icon: Images,
+    ocid: "dashboard.nav_link.galeri",
   },
   {
     label: "Kritik & Saran",

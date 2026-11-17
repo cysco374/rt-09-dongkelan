@@ -53,6 +53,7 @@ const AREAS: Record<string, Role[]> = {
   "/dashboard/surat": ["admin", "ketua", "sekretaris"],
   "/dashboard/fasilitas": ["admin", "ketua", "sekretaris"],
   "/dashboard/pengurus": ["admin", "ketua", "sekretaris"],
+  "/dashboard/galeri": ["admin", "ketua", "sekretaris"],
   "/dashboard/kritik-saran": ["admin", "ketua", "bendahara", "sekretaris"],
   "/dashboard/pengguna": ["admin", "ketua"],
   "/dashboard/pengaturan": ["admin", "ketua", "bendahara", "sekretaris"],
@@ -69,6 +70,17 @@ export interface FeedbackPublic {
 export interface FeedbackFull extends FeedbackPublic {
   phone: string;
 }
+
+export interface GaleriItem {
+  id: string;
+  title: string;
+  description: string;
+  date: string; // YYYY-MM-DD
+  imageVersion: number;
+  createdAt: bigint;
+}
+export const galeriImg = (g: GaleriItem) =>
+  `/api/img/${g.id}?v=${g.imageVersion}`;
 
 export interface AppUser {
   username: string;
@@ -132,6 +144,12 @@ export interface PortalLookup {
 export interface ApiActor extends backendInterface {
   login(username: string, passwordHash: string): Promise<string>;
   whoami(): Promise<Session>;
+  listGaleri(): Promise<GaleriItem[]>;
+  saveGaleri(
+    d: { id?: string; title: string; description: string; date: string },
+    image?: string,
+  ): Promise<string>;
+  deleteGaleri(id: string): Promise<void>;
   submitFeedback(name: string, phone: string, message: string): Promise<string>;
   listFeedbackPublic(): Promise<FeedbackPublic[]>;
   listFeedback(): Promise<FeedbackFull[]>;
@@ -223,6 +241,9 @@ const names = [
   "seedDemo",
   "seedDemoMore",
   "whoami",
+  "listGaleri",
+  "saveGaleri",
+  "deleteGaleri",
   "submitFeedback",
   "listFeedbackPublic",
   "listFeedback",

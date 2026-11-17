@@ -4,6 +4,7 @@ import {
   Bell,
   ConciergeBell,
   Home,
+  Images,
   LogIn,
   Menu,
   MessageSquareText,
@@ -25,6 +26,12 @@ const navItems = [
     to: "/layanan",
     icon: ConciergeBell,
     ocid: "nav.layanan_link",
+  },
+  {
+    label: "Galeri",
+    to: "/galeri",
+    icon: Images,
+    ocid: "nav.galeri_link",
   },
   {
     label: "Kritik & Saran",
