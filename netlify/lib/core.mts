@@ -484,6 +484,122 @@ methods.listGaleri = {
     ),
 };
 
+// ---------- backup & restore ----------
+const BACKUP_FORMAT = "rt09-backup";
+const BACKUP_COLLECTIONS = [
+  "warga", "kk", "pengumuman", "iuran", "surat",
+  "fasilitas", "pengurus", "feedback", "galeri", "user", "galeri-img",
+] as const;
+const BACKUP_SINGLE = ["meta/settings"];
+const BACKUP_KEY_RE = new RegExp(
+  `^(${BACKUP_COLLECTIONS.join("|")})/[A-Za-z0-9_.-]{1,80}$`,
+);
+const isBackupKey = (k: string) => BACKUP_SINGLE.includes(k) || BACKUP_KEY_RE.test(k);
+
+async function listBackupKeys(store: Store) {
+  const keys: string[] = [];
+  for (const c of BACKUP_COLLECTIONS) {
+    const { blobs } = await store.list({ prefix: `${c}/` });
+    for (const b of blobs) if (isBackupKey(b.key)) keys.push(b.key);
+  }
+  for (const k of BACKUP_SINGLE) if (await store.get(k, { type: "json" })) keys.push(k);
+  return keys;
+}
+const countByType = (keys: string[]) => {
+  const out: Record<string, number> = {};
+  for (const k of keys) {
+    const t = k.includes("/") && k !== "meta/settings" ? k.split("/")[0] : "settings";
+    out[t] = (out[t] ?? 0) + 1;
+  }
+  return out;
+};
+
+methods.exportBackup = {
+  auth: true,
+  roles: ["ketua"],
+  fn: async ({ store }) => {
+    const keys = await listBackupKeys(store);
+    const data: Record<string, unknown> = {};
+    for (let i = 0; i < keys.length; i += 25) {
+      const chunk = await Promise.all(
+        keys.slice(i, i + 25).map((k) => store.get(k, { type: "json" })),
+      );
+      chunk.forEach((v, j) => {
+        if (v) data[keys[i + j]] = v;
+      });
+    }
+    // dikirim sebagai string agar tidak diubah oleh pengkodean bigint RPC
+    return JSON.stringify({
+      format: BACKUP_FORMAT,
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      jumlah: countByType(Object.keys(data)),
+      data,
+    });
+  },
+};
+
+function validateBackupEntry(key: string, v: any, cloud?: string) {
+  if (!v || typeof v !== "object" || Array.isArray(v))
+    throw new HttpError(400, `Isi backup tidak valid: ${key}`);
+  const [col, id] = key.split("/");
+  if (col === "galeri-img") {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(v.ct) || typeof v.b64 !== "string")
+      throw new HttpError(400, `Foto tidak valid: ${key}`);
+  } else if (col === "user") {
+    if (
+      v.username !== id ||
+      !USERNAME_RE.test(id) ||
+      !(ROLES as readonly string[]).includes(v.role) ||
+      typeof v.hash !== "string" ||
+      typeof v.salt !== "string"
+    )
+      throw new HttpError(400, `Akun tidak valid: ${key}`);
+  } else if (col !== undefined && key !== "meta/settings") {
+    if (v.id !== id) throw new HttpError(400, `ID tidak cocok: ${key}`);
+    if (col === "galeri" && v.imageUrl && !/^https:\/\/res\.cloudinary\.com\//.test(String(v.imageUrl)))
+      throw new HttpError(400, `Alamat foto tidak valid: ${key}`);
+  }
+}
+
+methods.restoreBackup = {
+  auth: true,
+  roles: ["ketua"],
+  fn: async ({ store }, [text, mode, dryRun]) => {
+    let b: any;
+    try {
+      b = JSON.parse(String(text));
+    } catch {
+      throw new HttpError(400, "Berkas backup bukan JSON yang valid");
+    }
+    if (b?.format !== BACKUP_FORMAT || b?.version !== 1 || typeof b.data !== "object" || !b.data)
+      throw new HttpError(400, "Berkas ini bukan backup RT 09 yang dikenali");
+    if (mode !== "replace" && mode !== "merge")
+      throw new HttpError(400, "Mode restore tidak valid");
+    const incoming = Object.keys(b.data);
+    for (const k of incoming) {
+      if (!isBackupKey(k)) throw new HttpError(400, `Kunci tidak diizinkan di backup: ${k}`);
+      validateBackupEntry(k, b.data[k]);
+    }
+    const existing = await listBackupKeys(store);
+    const incomingSet = new Set(incoming);
+    const toDelete = mode === "replace" ? existing.filter((k) => !incomingSet.has(k)) : [];
+    const summary = {
+      mode,
+      exportedAt: b.exportedAt ?? null,
+      jumlah: countByType(incoming),
+      dihapus: toDelete.length,
+    };
+    if (dryRun) return { ...summary, applied: false };
+    for (let i = 0; i < incoming.length; i += 20)
+      await Promise.all(incoming.slice(i, i + 20).map((k) => store.setJSON(k, b.data[k])));
+    for (let i = 0; i < toDelete.length; i += 20)
+      await Promise.all(toDelete.slice(i, i + 20).map((k) => store.delete(k)));
+    await store.delete("meta/stats");
+    return { ...summary, applied: true };
+  },
+};
+
 const filterBy =
   (c: Collection, field: string) =>
   async ({ store }: Ctx, [v]: any[]) =>
@@ -1251,8 +1367,11 @@ export async function handleRpc(
   try {
     if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
     const raw = await req.text();
-    if (raw.length > 1_000_000)
-      throw new HttpError(413, "Payload terlalu besar");
+    // restore backup boleh lebih besar; method lain tetap dibatasi 1 MB
+    const limit = raw.startsWith('{"method":"restoreBackup"')
+      ? 5_000_000
+      : 1_000_000;
+    if (raw.length > limit) throw new HttpError(413, "Payload terlalu besar");
     const { method, args } = decodeInput(raw) as {
       method: string;
       args?: any[];

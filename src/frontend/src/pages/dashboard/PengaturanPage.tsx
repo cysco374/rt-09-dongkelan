@@ -21,6 +21,7 @@ import {
   useWebsiteSettings,
 } from "../../hooks/useQueries";
 import { sha256 } from "../../utils/hash";
+import BackupCard from "./BackupCard";
 
 function PasswordCard() {
   const [f, setF] = useState({ cur: "", next: "", conf: "" });
@@ -360,6 +361,8 @@ export default function PengaturanPage() {
           </div>
         </CardContent>
       </Card>
+
+      {(role === "admin" || role === "ketua") && <BackupCard />}
 
       {role === "admin" ? (
         <>

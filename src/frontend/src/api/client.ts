@@ -98,6 +98,14 @@ export interface CloudinarySign {
   signature: string;
 }
 
+export interface RestoreSummary {
+  mode: "replace" | "merge";
+  exportedAt: string | null;
+  jumlah: Record<string, number>;
+  dihapus: number;
+  applied: boolean;
+}
+
 export interface AppUser {
   username: string;
   name: string;
@@ -160,6 +168,12 @@ export interface PortalLookup {
 export interface ApiActor extends backendInterface {
   login(username: string, passwordHash: string): Promise<string>;
   whoami(): Promise<Session>;
+  exportBackup(): Promise<string>;
+  restoreBackup(
+    text: string,
+    mode: "replace" | "merge",
+    dryRun: boolean,
+  ): Promise<RestoreSummary>;
   listGaleri(): Promise<GaleriItem[]>;
   galeriUploadSign(): Promise<CloudinarySign>;
   saveGaleri(
@@ -258,6 +272,8 @@ const names = [
   "seedDemo",
   "seedDemoMore",
   "whoami",
+  "exportBackup",
+  "restoreBackup",
   "listGaleri",
   "galeriUploadSign",
   "saveGaleri",

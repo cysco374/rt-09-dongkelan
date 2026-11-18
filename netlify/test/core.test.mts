@@ -681,4 +681,53 @@ assert.ok(await getGaleriImage(store as never, "galeri_1_aaaaaa"), "kept when ph
 assert.equal((await callC("saveGaleri", [{ ...gal, id: "galeri_1_aaaaaa" }, img2], ket)).status, 200);
 assert.equal(await getGaleriImage(store as never, "galeri_1_aaaaaa"), null, "legacy blob removed after migrate");
 globalThis.fetch = realFetch;
+
+// ---- backup & restore
+assert.equal((await call("exportBackup", [], "")).status, 401);
+assert.equal((await call("exportBackup", [], ben2)).status, 403);
+assert.equal((await call("exportBackup", [], sek)).status, 403);
+const exp = await call("exportBackup", [], ket);
+assert.equal(exp.status, 200);
+assert.equal(typeof exp.result, "string");
+const bk = JSON.parse(exp.result);
+assert.equal(bk.format, "rt09-backup");
+const keysB = Object.keys(bk.data);
+assert.ok(keysB.length > 20);
+assert.ok(!keysB.includes("meta/secret") && !keysB.includes("meta/admin") && !keysB.includes("meta/stats"), "secrets excluded");
+assert.ok(keysB.some((k) => k.startsWith("warga/")) && keysB.some((k) => k.startsWith("iuran/")));
+const wBefore = (await call("listWarga")).result.length;
+const iBefore = (await call("listIuran")).result.length;
+// dry-run tidak mengubah apa pun
+const dry = await call("restoreBackup", [exp.result, "replace", true], ket);
+assert.equal(dry.status, 200); assert.equal(dry.result.applied, false); assert.equal(dry.result.dihapus, 0);
+// ubah data lalu pulihkan
+await call("addWarga", [{ ...newWarga, nik: "3402018888888888", fullName: "Setelah Backup" }], ket);
+const wid2 = (await call("listWarga")).result.find((w: any) => w.fullName === "Setelah Backup").id;
+await call("deleteIuran", [(await call("listIuran")).result[0].id], ket);
+const merged = await call("restoreBackup", [exp.result, "merge", false], ket);
+assert.equal(merged.status, 200);
+assert.equal((await call("listIuran")).result.length, iBefore, "merge restores deleted iuran");
+assert.equal((await call("listWarga")).result.length, wBefore + 1, "merge keeps newer data");
+const rep = await call("restoreBackup", [exp.result, "replace", false], ket);
+assert.equal(rep.status, 200);
+assert.ok(rep.result.dihapus >= 1);
+assert.equal((await call("listWarga")).result.length, wBefore, "replace removes data not in backup");
+assert.equal((await call("getWarga", [wid2])).result, null);
+// tipe bigint tetap utuh setelah restore
+const iur0 = (await call("listIuran")).result[0];
+assert.equal(typeof iur0.total, "bigint" in globalThis ? typeof iur0.total : "object");
+// validasi & penolakan
+assert.equal((await call("restoreBackup", ["bukan json", "merge", false], ket)).status, 400);
+assert.equal((await call("restoreBackup", [JSON.stringify({ format: "x" }), "merge", false], ket)).status, 400);
+const evil = (data: any) => JSON.stringify({ format: "rt09-backup", version: 1, data });
+assert.equal((await call("restoreBackup", [evil({ "meta/admin": { username: "x" } }), "merge", false], ket)).status, 400, "meta/admin blocked");
+assert.equal((await call("restoreBackup", [evil({ "meta/secret": { k: "x" } }), "merge", false], ket)).status, 400, "meta/secret blocked");
+assert.equal((await call("restoreBackup", [evil({ "../x": { a: 1 } }), "merge", false], ket)).status, 400);
+assert.equal((await call("restoreBackup", [evil({ "user/jahat": { username: "jahat", role: "admin", salt: "a", hash: "b" } }), "merge", false], ket)).status, 400, "no admin via user");
+assert.equal((await call("restoreBackup", [evil({ "warga/abc": { id: "lain" } }), "merge", false], ket)).status, 400, "id mismatch");
+assert.equal((await call("restoreBackup", [evil({ "galeri/g1": { id: "g1", imageUrl: "https://evil.com/x.jpg" } }), "merge", false], ket)).status, 400, "foreign image url");
+assert.equal((await call("restoreBackup", [exp.result, "hapus", false], ket)).status, 400);
+assert.equal((await call("restoreBackup", [exp.result, "merge", false], sek)).status, 403);
+// login admin tetap berfungsi setelah restore
+assert.ok((await call("listWarga", [], adminTok)).result.length > 0);
 console.log("ALL OK");
