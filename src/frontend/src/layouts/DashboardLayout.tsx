@@ -7,6 +7,7 @@ import {
   Building2,
   ChevronRight,
   CreditCard,
+  FilePen,
   FileText,
   Images,
   LayoutDashboard,
@@ -80,6 +81,12 @@ const sidebarItems = [
     to: "/dashboard/pengurus",
     icon: UserCog,
     ocid: "dashboard.nav_link.pengurus",
+  },
+  {
+    label: "Template Surat",
+    to: "/dashboard/template-surat",
+    icon: FilePen,
+    ocid: "dashboard.nav_link.template_surat",
   },
   {
     label: "Galeri",

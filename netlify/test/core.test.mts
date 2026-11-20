@@ -730,4 +730,39 @@ assert.equal((await call("restoreBackup", [exp.result, "hapus", false], ket)).st
 assert.equal((await call("restoreBackup", [exp.result, "merge", false], sek)).status, 403);
 // login admin tetap berfungsi setelah restore
 assert.ok((await call("listWarga", [], adminTok)).result.length > 0);
+
+// ---- surat keluar (template)
+const yr = new Date(Date.now() + 7 * 3600 * 1000).getUTCFullYear();
+assert.equal((await call("peekNomorSurat", [], "")).status, 401);
+assert.equal((await call("peekNomorSurat", [], ben2)).status, 403);
+const pk = await call("peekNomorSurat", [], sek);
+assert.match(pk.result.nomor, new RegExp(`^0001/\\d{2}/${yr}$`));
+assert.equal((await call("saveSuratKeluar", [{ type: "x", fields: {} }], sek)).status, 400);
+assert.equal((await call("saveSuratKeluar", [{ type: "rapat", fields: { "a b": "x" } }], sek)).status, 400);
+assert.equal((await call("saveSuratKeluar", [{ type: "rapat", fields: { hal: "Undangan" } }], ben2)).status, 403);
+const s1 = await call("saveSuratKeluar", [{ type: "rapat", fields: { hal: "Undangan", tempat: "Balai RT 09" } }], sek);
+assert.equal(s1.status, 200, JSON.stringify(s1));
+assert.equal(s1.result.nomor, pk.result.nomor, "peek == saved number");
+const s2 = await call("saveSuratKeluar", [{ type: "lelayu", fields: { nama: "Alm. Bpk X" } }], ket);
+assert.match(s2.result.nomor, /^0002\//);
+assert.equal((await call("peekNomorSurat", [], ket)).result.seq, 3);
+// edit keeps nomor
+const s1e = await call("saveSuratKeluar", [{ id: s1.result.id, type: "rapat", fields: { hal: "Undangan Rapat Akbar" } }], sek);
+assert.equal(s1e.status, 200);
+const lst = (await call("listSuratkeluar", [], sek)).result;
+assert.equal(lst.length, 2);
+assert.equal(lst.find((x: any) => x.id === s1.result.id).fields.hal, "Undangan Rapat Akbar");
+assert.equal(lst.find((x: any) => x.id === s1.result.id).nomor, s1.result.nomor);
+assert.equal((await call("listSuratkeluar", [], ben2)).status, 403, "bendahara no access");
+assert.equal((await call("addSuratkeluar", [{}], adminTok)).status, 404);
+// atur nomor berikutnya
+assert.equal((await call("setNomorSuratBerikutnya", [0], sek)).status, 400);
+assert.match((await call("setNomorSuratBerikutnya", [31], sek)).result, /^0031\//);
+assert.match((await call("saveSuratKeluar", [{ type: "jenguk", fields: {} }], sek)).result.nomor, /^0031\//);
+assert.equal((await call("deleteSuratkeluar", [s2.result.id], ben2)).status, 403);
+assert.equal((await call("deleteSuratkeluar", [s2.result.id], sek)).status, 200);
+// ikut backup
+const bk2 = JSON.parse((await call("exportBackup", [], ket)).result);
+assert.ok(Object.keys(bk2.data).some((k) => k.startsWith("suratkeluar/")));
+assert.ok(bk2.data["meta/surat-counter"]);
 console.log("ALL OK");

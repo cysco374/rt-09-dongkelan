@@ -38,6 +38,7 @@ const COLLECTIONS = [
   "pengurus",
   "feedback",
   "galeri",
+  "suratkeluar",
 ] as const;
 type Collection = (typeof COLLECTIONS)[number];
 
@@ -54,6 +55,7 @@ const WRITE_ROLES: Record<string, Role[]> = {
   iuran: ["ketua", "bendahara"],
   feedback: ["ketua", "sekretaris"], // moderasi (hapus)
   galeri: ["ketua", "sekretaris"],
+  suratkeluar: ["ketua", "sekretaris"],
 };
 const USERNAME_RE = /^[a-z0-9._-]{3,30}$/;
 
@@ -488,9 +490,9 @@ methods.listGaleri = {
 const BACKUP_FORMAT = "rt09-backup";
 const BACKUP_COLLECTIONS = [
   "warga", "kk", "pengumuman", "iuran", "surat",
-  "fasilitas", "pengurus", "feedback", "galeri", "user", "galeri-img",
+  "fasilitas", "pengurus", "feedback", "galeri", "user", "galeri-img", "suratkeluar",
 ] as const;
-const BACKUP_SINGLE = ["meta/settings"];
+const BACKUP_SINGLE = ["meta/settings", "meta/surat-counter"];
 const BACKUP_KEY_RE = new RegExp(
   `^(${BACKUP_COLLECTIONS.join("|")})/[A-Za-z0-9_.-]{1,80}$`,
 );
@@ -508,7 +510,7 @@ async function listBackupKeys(store: Store) {
 const countByType = (keys: string[]) => {
   const out: Record<string, number> = {};
   for (const k of keys) {
-    const t = k.includes("/") && k !== "meta/settings" ? k.split("/")[0] : "settings";
+    const t = k.startsWith("meta/") ? k.slice(5) : k.split("/")[0];
     out[t] = (out[t] ?? 0) + 1;
   }
   return out;
@@ -555,7 +557,7 @@ function validateBackupEntry(key: string, v: any, cloud?: string) {
       typeof v.salt !== "string"
     )
       throw new HttpError(400, `Akun tidak valid: ${key}`);
-  } else if (col !== undefined && key !== "meta/settings") {
+  } else if (col !== undefined && !key.startsWith("meta/")) {
     if (v.id !== id) throw new HttpError(400, `ID tidak cocok: ${key}`);
     if (col === "galeri" && v.imageUrl && !/^https:\/\/res\.cloudinary\.com\//.test(String(v.imageUrl)))
       throw new HttpError(400, `Alamat foto tidak valid: ${key}`);
@@ -597,6 +599,79 @@ methods.restoreBackup = {
       await Promise.all(toDelete.slice(i, i + 20).map((k) => store.delete(k)));
     await store.delete("meta/stats");
     return { ...summary, applied: true };
+  },
+};
+
+// ---------- surat keluar (template undangan, lelayu, dll) ----------
+delete methods.addSuratkeluar;
+delete methods.updateSuratkeluar;
+const SURAT_TYPES = ["rapat", "lelayu", "jenguk", "halalbihalal"];
+const SURAT_ROLES: Role[] = ["ketua", "sekretaris"];
+methods.listSuratkeluar.roles = SURAT_ROLES;
+methods.getSuratkeluar.roles = SURAT_ROLES;
+const wibNow = () => new Date(Date.now() + 7 * 3600 * 1000);
+const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+const formatNomor = (seq: number, d: Date) =>
+  `${pad(seq, 4)}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+async function readCounter(store: Store, year: number) {
+  const c = await store.get("meta/surat-counter", { type: "json" });
+  return c && c.year === year ? (c.seq as number) : 0;
+}
+methods.peekNomorSurat = {
+  auth: true,
+  roles: SURAT_ROLES,
+  fn: async ({ store }) => {
+    const d = wibNow();
+    const seq = (await readCounter(store, d.getUTCFullYear())) + 1;
+    return { nomor: formatNomor(seq, d), seq };
+  },
+};
+methods.setNomorSuratBerikutnya = {
+  auth: true,
+  roles: SURAT_ROLES,
+  fn: async ({ store }, [n]) => {
+    const num = Number(n);
+    if (!Number.isInteger(num) || num < 1 || num > 9999)
+      throw new HttpError(400, "Nomor harus 1–9999");
+    const d = wibNow();
+    await store.setJSON("meta/surat-counter", { year: d.getUTCFullYear(), seq: num - 1 });
+    return formatNomor(num, d);
+  },
+};
+methods.saveSuratKeluar = {
+  auth: true,
+  roles: SURAT_ROLES,
+  fn: async ({ store, session }, [d]) => {
+    if (!SURAT_TYPES.includes(d?.type)) throw new HttpError(400, "Jenis surat tidak valid");
+    const f = d?.fields;
+    if (!f || typeof f !== "object" || Array.isArray(f) || Object.keys(f).length > 30)
+      throw new HttpError(400, "Isi surat tidak valid");
+    const fields: Record<string, string> = {};
+    for (const [k, v] of Object.entries(f)) {
+      if (!/^[a-zA-Z]{1,30}$/.test(k)) throw new HttpError(400, "Isian tidak valid");
+      fields[k] = str(v, 1000);
+    }
+    if (typeof d.id === "string" && d.id !== "") {
+      const old = await store.get(`suratkeluar/${d.id}`, { type: "json" });
+      if (!old) throw new HttpError(404, "Surat tidak ditemukan");
+      await store.setJSON(`suratkeluar/${d.id}`, { ...old, fields, updatedAt: Date.now() });
+      return old;
+    }
+    const now = wibNow();
+    const seq = (await readCounter(store, now.getUTCFullYear())) + 1;
+    await store.setJSON("meta/surat-counter", { year: now.getUTCFullYear(), seq });
+    const id = newId("suratkeluar");
+    const rec = {
+      id,
+      type: d.type,
+      nomor: formatNomor(seq, now),
+      tanggal: now.toISOString().slice(0, 10),
+      fields,
+      createdBy: session?.n ?? "",
+      createdAt: Date.now(),
+    };
+    await store.setJSON(`suratkeluar/${id}`, rec);
+    return rec;
   },
 };
 

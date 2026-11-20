@@ -53,6 +53,7 @@ const AREAS: Record<string, Role[]> = {
   "/dashboard/surat": ["admin", "ketua", "sekretaris"],
   "/dashboard/fasilitas": ["admin", "ketua", "sekretaris"],
   "/dashboard/pengurus": ["admin", "ketua", "sekretaris"],
+  "/dashboard/template-surat": ["admin", "ketua", "sekretaris"],
   "/dashboard/galeri": ["admin", "ketua", "sekretaris"],
   "/dashboard/kritik-saran": ["admin", "ketua", "bendahara", "sekretaris"],
   "/dashboard/pengguna": ["admin", "ketua"],
@@ -104,6 +105,16 @@ export interface RestoreSummary {
   jumlah: Record<string, number>;
   dihapus: number;
   applied: boolean;
+}
+
+export interface SuratKeluar {
+  id: string;
+  type: "rapat" | "lelayu" | "jenguk" | "halalbihalal";
+  nomor: string;
+  tanggal: string; // yyyy-mm-dd
+  fields: Record<string, string>;
+  createdBy: string;
+  createdAt: bigint;
 }
 
 export interface AppUser {
@@ -168,6 +179,15 @@ export interface PortalLookup {
 export interface ApiActor extends backendInterface {
   login(username: string, passwordHash: string): Promise<string>;
   whoami(): Promise<Session>;
+  listSuratkeluar(): Promise<SuratKeluar[]>;
+  deleteSuratkeluar(id: string): Promise<void>;
+  peekNomorSurat(): Promise<{ nomor: string; seq: number }>;
+  setNomorSuratBerikutnya(n: number): Promise<string>;
+  saveSuratKeluar(d: {
+    id?: string;
+    type: string;
+    fields: Record<string, string>;
+  }): Promise<SuratKeluar>;
   exportBackup(): Promise<string>;
   restoreBackup(
     text: string,
@@ -272,6 +292,11 @@ const names = [
   "seedDemo",
   "seedDemoMore",
   "whoami",
+  "listSuratkeluar",
+  "deleteSuratkeluar",
+  "peekNomorSurat",
+  "setNomorSuratBerikutnya",
+  "saveSuratKeluar",
   "exportBackup",
   "restoreBackup",
   "listGaleri",

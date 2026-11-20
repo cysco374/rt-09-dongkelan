@@ -27,6 +27,7 @@ import PenggunaPage from "./pages/dashboard/PenggunaPage";
 import PengumumanPage from "./pages/dashboard/PengumumanPage";
 import PengurusPage from "./pages/dashboard/PengurusPage";
 import SuratPage from "./pages/dashboard/SuratPage";
+import TemplateSuratPage from "./pages/dashboard/TemplateSuratPage";
 import WargaPage from "./pages/dashboard/WargaPage";
 
 // Root route
@@ -86,6 +87,12 @@ const dashboardGaleriRoute = createRoute({
   getParentRoute: () => dashboardLayoutRoute,
   path: "/dashboard/galeri",
   component: GaleriAdminPage,
+});
+
+const dashboardTemplateSuratRoute = createRoute({
+  getParentRoute: () => dashboardLayoutRoute,
+  path: "/dashboard/template-surat",
+  component: TemplateSuratPage,
 });
 
 const loginRoute = createRoute({
@@ -195,6 +202,7 @@ const routeTree = rootRoute.addChildren([
     dashboardPenggunaRoute,
     dashboardKritikRoute,
     dashboardGaleriRoute,
+    dashboardTemplateSuratRoute,
   ]),
 ]);
 
